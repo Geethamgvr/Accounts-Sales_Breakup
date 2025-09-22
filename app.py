@@ -2,19 +2,34 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from io import BytesIO
+import openpyxl  # For Excel file support
 
 # Page configuration
 st.set_page_config(page_title="Sales Report Generator", page_icon="📊", layout="wide")
 st.title("📊 Sales Report Generator")
-st.markdown("Upload your CSV & Excel file to generate a formatted sales report with subtotals and grand totals.")
+st.markdown("Upload your data file to generate a formatted sales report with subtotals and grand totals.")
 
-# File upload
-uploaded_file = st.file_uploader("Choose a CSV file", type=['csv','xlsx','xls'])
+# File upload with multiple format support
+uploaded_file = st.file_uploader(
+    "Choose a data file", 
+    type=['csv', 'xlsx', 'xls'],
+    help="Supported formats: CSV, Excel (XLSX, XLS)"
+)
 
 if uploaded_file is not None:
     try:
-        # Load and process data
-        df = pd.read_csv(uploaded_file, skiprows=5).iloc[:-1]
+        # Determine file type and load data appropriately
+        file_extension = uploaded_file.name.split('.')[-1].lower()
+        
+        if file_extension == 'csv':
+            # Load and process CSV
+            df = pd.read_csv(uploaded_file, skiprows=5).iloc[:-1]
+        elif file_extension in ['xlsx', 'xls']:
+            # Load and process Excel
+            df = pd.read_excel(uploaded_file, skiprows=5).iloc[:-1]
+        else:
+            st.error("Unsupported file format. Please upload a CSV or Excel file.")
+            st.stop()
         
         st.header("Data Preview")
         st.dataframe(df.head())
@@ -199,6 +214,7 @@ if uploaded_file is not None:
         
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
+        st.info("Please ensure your file has the correct format with at least 6 rows of header content.")
 
 else:
-    st.info("👆 Please upload a CSV file to get started.")
+    st.info("👆 Please upload a CSV or Excel file to get started.")
