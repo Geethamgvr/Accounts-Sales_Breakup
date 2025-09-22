@@ -6,10 +6,10 @@ from io import BytesIO
 # Page configuration
 st.set_page_config(page_title="Sales Report Generator", page_icon="📊", layout="wide")
 st.title("📊 Sales Report Generator")
-st.markdown("Upload your CSV file to generate a formatted sales report with subtotals and grand totals.")
+st.markdown("Upload your CSV & Excel file to generate a formatted sales report with subtotals and grand totals.")
 
 # File upload
-uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'])
+uploaded_file = st.file_uploader("Choose a CSV file", type=['csv','xlsx','xls'])
 
 if uploaded_file is not None:
     try:
