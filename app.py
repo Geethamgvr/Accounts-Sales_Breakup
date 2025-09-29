@@ -31,10 +31,10 @@ if uploaded_file is not None:
                 lambda row: f"{row['Table No']} {row['Online Reference Name']}".strip() if row['Online Reference Name'] else row['Table No'], axis=1)
 
             # Group and aggregate
-            grouped = df.groupby(['Order Type', 'Sub Category', 'Main Category']).agg({
+            grouped = df.groupby(['Order Type', 'Sub Category', 'Category']).agg({
                 'After Discount': 'sum', 'CGST': 'sum', 'SGST': 'sum', 
                 'Delivery Charge': 'sum', 'Total Price': 'sum'
-            }).reset_index().sort_values(by=['Order Type', 'Sub Category', 'Main Category'])
+            }).reset_index().sort_values(by=['Order Type', 'Sub Category', 'Category'])
 
             # Build final table with subtotals
             result = []
@@ -49,7 +49,7 @@ if uploaded_file is not None:
                         result.append({
                             'Order Type': order_type if not order_type_written else '',
                             'Sub Category': sub_cat,
-                            'Main Category': row['Main Category'],
+                            'Main Category': row['Category'],
                             'After Discount': row['After Discount'],
                             'CGST': row['CGST'],
                             'SGST': row['SGST'],
