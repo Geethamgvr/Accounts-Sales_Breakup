@@ -13,7 +13,7 @@ st.markdown("Upload your data file to generate a formatted sales report with sub
 uploaded_file = st.file_uploader(
     "Choose a data file", 
     type=['csv'],
-    help="Supported formats: CSV
+    help="Supported formats: CSV"
 )
 
 if uploaded_file is not None:
