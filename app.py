@@ -12,8 +12,8 @@ st.markdown("Upload your data file to generate a formatted sales report with sub
 # File upload with multiple format support
 uploaded_file = st.file_uploader(
     "Choose a data file", 
-    type=['csv', 'xlsx', 'xls'],
-    help="Supported formats: CSV, Excel (XLSX, XLS)"
+    type=['csv'],
+    help="Supported formats: CSV
 )
 
 if uploaded_file is not None:
@@ -29,22 +29,7 @@ if uploaded_file is not None:
                 'Online Reference Name': 'Online Reference Name',
                 'Table No': 'Table No',
                 'Order Type': 'Order Type',
-                'Main Category': 'Main Category',
-                'After Discount': 'After Discount',
-                'CGST': 'CGST',
-                'SGST': 'SGST',
-                'Delivery Charge': 'Delivery Charge',
-                'Total Price': 'Total Price'
-            }
-        elif file_extension in ['xlsx', 'xls']:
-            # Load and process Excel
-            df = pd.read_excel(uploaded_file, skiprows=5).iloc[:-1]
-            # Map Excel column names to standard names
-            column_mapping = {
-                'Onlinerefname': 'Online Reference Name',  # Excel column name -> Standard name
-                'Table No': 'Table No',
-                'Order Type': 'Order Type',
-                'Main Category': 'Main Category',
+                'Category': 'Main Category',
                 'After Discount': 'After Discount',
                 'CGST': 'CGST',
                 'SGST': 'SGST',
