@@ -49,7 +49,7 @@ if uploaded_file is not None:
                         result.append({
                             'Order Type': order_type if not order_type_written else '',
                             'Sub Category': sub_cat,
-                            'Main Category': row['Category'],
+                            'Category': row['Category'],
                             'After Discount': row['After Discount'],
                             'CGST': row['CGST'],
                             'SGST': row['SGST'],
@@ -61,7 +61,7 @@ if uploaded_file is not None:
                     # Subcategory total
                     subtotal = sdf.select_dtypes(include='number').sum()
                     result.append({
-                        'Order Type': '', 'Sub Category': f"{sub_cat} Total", 'Main Category': '',
+                        'Order Type': '', 'Sub Category': f"{sub_cat} Total", 'Category': '',
                         'After Discount': subtotal['After Discount'], 'CGST': subtotal['CGST'],
                         'SGST': subtotal['SGST'], 'Delivery Charge': subtotal['Delivery Charge'],
                         'Total Price': subtotal['Total Price']
@@ -70,7 +70,7 @@ if uploaded_file is not None:
                 # Order Type total
                 order_total = odf.select_dtypes(include='number').sum()
                 result.append({
-                    'Order Type': order_type, 'Sub Category': f"{order_type.strip()} Total", 'Main Category': '',
+                    'Order Type': order_type, 'Sub Category': f"{order_type.strip()} Total", 'Category': '',
                     'After Discount': order_total['After Discount'], 'CGST': order_total['CGST'],
                     'SGST': order_total['SGST'], 'Delivery Charge': order_total['Delivery Charge'],
                     'Total Price': order_total['Total Price']
@@ -91,7 +91,7 @@ if uploaded_file is not None:
             grand_rows[numeric_cols] = grand_rows[numeric_cols].fillna(0)
             
             grand_total = {
-                'Order Type': 'Grand Total', 'Sub Category': '', 'Main Category': '',
+                'Order Type': 'Grand Total', 'Sub Category': '', 'Category': '',
                 'After Discount': grand_rows['After Discount'].sum(),
                 'CGST': grand_rows['CGST'].sum(), 'SGST': grand_rows['SGST'].sum(),
                 'Delivery Charge': grand_rows['Delivery Charge'].sum(),
