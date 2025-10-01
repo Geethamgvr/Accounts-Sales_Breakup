@@ -7,41 +7,32 @@ import openpyxl
 # Page configuration
 st.set_page_config(page_title="Sales Report Generator", page_icon="📊", layout="wide")
 st.title("📊 Sales Report Generator")
-st.markdown("Upload your data file to generate a formatted sales report with subtotals and grand totals.")
+st.markdown("Upload your CSV data file to generate a formatted sales report with subtotals and grand totals.")
 
-# File upload with multiple format support
+# File upload with CSV only
 uploaded_file = st.file_uploader(
-    "Choose a data file", 
+    "Choose a CSV file", 
     type=['csv'],
-    help="Supported formats: CSV"
+    help="Upload CSV file only"
 )
 
 if uploaded_file is not None:
     try:
-        # Determine file type and load data appropriately
-        file_extension = uploaded_file.name.split('.')[-1].lower()
+        # Load and process CSV
+        df = pd.read_csv(uploaded_file, skiprows=5).iloc[:-1]
         
-        if file_extension == 'csv':
-            # Load and process CSV
-            df = pd.read_csv(uploaded_file, skiprows=5).iloc[:-1]
-            # Standardize column names for CSV
-            column_mapping = {
-                'Online Reference Name': 'Online Reference Name',
-                'Table No': 'Table No',
-                'Order Type': 'Order Type',
-                'Category': 'Main Category',
-                'After Discount': 'After Discount',
-                'CGST': 'CGST',
-                'SGST': 'SGST',
-                'Delivery Charge': 'Delivery Charge',
-                'Total Price': 'Total Price'
-            }
-        else:
-            st.error("Unsupported file format. Please upload a CSV or Excel file.")
-            st.stop()
-        
-        # Rename columns based on file type
-        df = df.rename(columns=column_mapping)
+        # Standardize column names for CSV
+        df = df.rename(columns={
+            'Online Reference Name': 'Online Reference Name',
+            'Table No': 'Table No',
+            'Order Type': 'Order Type',
+            'Category': 'Main Category',
+            'After Discount': 'After Discount',
+            'CGST': 'CGST',
+            'SGST': 'SGST',
+            'Delivery Charge': 'Delivery Charge',
+            'Total Price': 'Total Price'
+        })
         
         # Show detected columns
         st.info(f"Detected columns: {', '.join(df.columns)}")
@@ -229,16 +220,19 @@ if uploaded_file is not None:
             worksheet.merge_range(0, 0, 0, len(final.columns)-1, 'SALES BREAKUP REPORT', title_format)
             worksheet.freeze_panes(2, 0)
 
+        # Get the binary data
+        excel_data = output.getvalue()
+        
         st.download_button(
-            "📥 Download Excel Report",
-            output.getvalue(),
-            "Final_Sales_Report.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            label="📥 Download Excel Report",
+            data=excel_data,
+            file_name="Final_Sales_Report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         
     except Exception as e:
         st.error(f"An error occurred: {str(e)}")
-        st.info("Please ensure your file has the correct format with at least 6 rows of header content.")
+        st.info("Please ensure your CSV file has the correct format with at least 6 rows of header content.")
 
 else:
-    st.info("👆 Please upload a CSV or Excel file to get started.")
+    st.info("👆 Please upload a CSV file to get started.")
