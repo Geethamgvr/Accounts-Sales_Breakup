@@ -21,24 +21,27 @@ if uploaded_file is not None:
         # Load and process CSV
         df = pd.read_csv(uploaded_file, skiprows=5).iloc[:-1]
         
-        # Standardize column names for CSV
-        df = df.rename(columns={
-            'Online Reference Name': 'Online Reference Name',
-            'Table No': 'Table No',
-            'Order Type': 'Order Type',
-            'Category': 'Main Category',
-            'After Discount': 'After Discount',
-            'CGST': 'CGST',
-            'SGST': 'SGST',
-            'Delivery Charge': 'Delivery Charge',
-            'Total Price': 'Total Price'
-        })
-        
         # Show detected columns
         st.info(f"Detected columns: {', '.join(df.columns)}")
         
         st.header("Data Preview")
         st.dataframe(df.head())
+        
+        # Map the actual columns from your CSV to the expected column names
+        column_mapping = {
+            'Online Reference Name': 'Online Reference Name',  # This column exists in your CSV
+            'Table No': 'Table No',  # This column exists in your CSV
+            'Order Type': 'Order Type',  # This column exists in your CSV
+            'Main Category': 'Main Category',  # This column exists in your CSV
+            'After Discount': 'After Discount',  # This column exists in your CSV
+            'CGST': 'CGST',  # This column exists in your CSV
+            'SGST': 'SGST',  # This column exists in your CSV
+            'Delivery Charge': 'Delivery Charge',  # This column exists in your CSV
+            'Total Price': 'Total Price'  # This column exists in your CSV
+        }
+        
+        # Rename columns based on mapping (this will only rename if columns exist)
+        df = df.rename(columns=column_mapping)
         
         # Check if required columns exist
         required_columns = ['Online Reference Name', 'Table No', 'Order Type', 'Main Category', 
@@ -47,6 +50,7 @@ if uploaded_file is not None:
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             st.error(f"Missing required columns: {', '.join(missing_columns)}")
+            st.info("Please ensure your CSV file contains all the required columns.")
             st.stop()
         
         with st.spinner("Processing your data..."):
