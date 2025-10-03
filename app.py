@@ -69,13 +69,21 @@ if uploaded_file is not None:
                 'SGST': 'sum',
                 'Delivery Charge': 'sum',
                 'Total Price': 'sum'
-            }).reset_index().sort_values(by=['Order Type', 'Sub Category', 'Main Category'])
+            }).reset_index()
+
+            # Define custom order for Order Type
+            order_type_order = ['Dine-In', 'Take-Away', 'Delivery']
+            grouped['Order Type'] = pd.Categorical(grouped['Order Type'], categories=order_type_order, ordered=True)
+            grouped = grouped.sort_values(by=['Order Type', 'Sub Category', 'Main Category'])
 
             # Function to build final output with subtotals
             def build_final_table(df):
                 result = []
 
-                for order_type in df['Order Type'].unique():
+                for order_type in order_type_order:
+                    if order_type not in df['Order Type'].unique():
+                        continue
+                        
                     odf = df[df['Order Type'] == order_type]
                     order_type_written = False
 
@@ -120,6 +128,19 @@ if uploaded_file is not None:
                         'Delivery Charge': order_total['Delivery Charge'],
                         'Total Price': order_total['Total Price']
                     })
+                    
+                    # Add empty line after Take-Away section
+                    if order_type == 'Take-Away':
+                        result.append({
+                            'Order Type': '',
+                            'Sub Category': '',
+                            'Main Category': '',
+                            'After Discount': '',
+                            'CGST': '',
+                            'SGST': '',
+                            'Delivery Charge': '',
+                            'Total Price': ''
+                        })
 
                 final_df = pd.DataFrame(result)
 
@@ -131,9 +152,6 @@ if uploaded_file is not None:
 
             # Build the final report
             final = build_final_table(grouped)
-
-            # Add blank row
-            final = pd.concat([final, pd.DataFrame([{}])], ignore_index=True)
 
             # Add Grand Total (only Delivery, Dine-In, Take-Away)
             totals_to_include = ['Delivery Total', 'Dine-In Total', 'Take-Away Total']
@@ -161,10 +179,64 @@ if uploaded_file is not None:
         # Download section
         st.header("5. Download Report")
         
-        # Create a BytesIO buffer for the Excel file
+        # Create a BytesIO buffer for the Excel file with formatting
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             final.to_excel(writer, index=False, sheet_name='Sales Report')
+            
+            # Get the xlsxwriter workbook and worksheet objects
+            workbook = writer.book
+            worksheet = writer.sheets['Sales Report']
+            
+            # Define formats
+            header_format = workbook.add_format({
+                'bold': True,
+                'text_wrap': True,
+                'valign': 'top',
+                'fg_color': '#D7E4BC',
+                'border': 1
+            })
+            
+            total_format = workbook.add_format({
+                'bold': True,
+                'fg_color': '#FFE699',
+                'border': 1
+            })
+            
+            grand_total_format = workbook.add_format({
+                'bold': True,
+                'fg_color': '#F8CBAD',
+                'border': 1
+            })
+            
+            normal_format = workbook.add_format({'border': 1})
+            
+            # Apply header format
+            for col_num, value in enumerate(final.columns.values):
+                worksheet.write(0, col_num, value, header_format)
+            
+            # Apply formatting to data rows
+            for row_num in range(1, len(final) + 1):
+                sub_category = final.iloc[row_num-1]['Sub Category'] if row_num-1 < len(final) else ''
+                order_type = final.iloc[row_num-1]['Order Type'] if row_num-1 < len(final) else ''
+                
+                # Determine the format based on content
+                if 'Grand Total' in str(order_type):
+                    cell_format = grand_total_format
+                elif 'Total' in str(sub_category):
+                    cell_format = total_format
+                else:
+                    cell_format = normal_format
+                
+                # Apply format to all cells in the row
+                for col_num in range(len(final.columns)):
+                    value = final.iloc[row_num-1, col_num] if row_num-1 < len(final) else ''
+                    worksheet.write(row_num, col_num, value, cell_format)
+            
+            # Auto-adjust column widths
+            for i, col in enumerate(final.columns):
+                max_len = max(final[col].astype(str).str.len().max(), len(col)) + 2
+                worksheet.set_column(i, i, max_len)
         
         # Create download button
         st.download_button(
@@ -187,5 +259,5 @@ st.markdown("""
 1. Upload a CSV file with the expected format
 2. The application will process your data
 3. Preview the processed report
-4. Download the final Excel file
+4. Download the final Excel file with highlighted totals
 """)
