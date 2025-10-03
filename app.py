@@ -103,12 +103,12 @@ if uploaded_file is not None:
                             })
                             order_type_written = True
 
-                        # Subcategory total (Category Total)
+                        # Subcategory total
                         subtotal = sdf.select_dtypes(include='number').sum()
                         result.append({
                             'Order Type': '',
-                            'Sub Category': f"{sub_cat}",
-                            'Main Category': 'Category Total',
+                            'Sub Category': f"{sub_cat} Total",
+                            'Main Category': '',
                             'After Discount': subtotal['After Discount'],
                             'CGST': subtotal['CGST'],
                             'SGST': subtotal['SGST'],
@@ -116,12 +116,12 @@ if uploaded_file is not None:
                             'Total Price': subtotal['Total Price']
                         })
 
-                    # Order Type total (Order Type Total)
+                    # Order Type total - modified to differentiate
                     order_total = odf.select_dtypes(include='number').sum()
                     result.append({
-                        'Order Type': order_type,
+                        'Order Type': f"{order_type} Total",  # Changed to include "Total" in Order Type
                         'Sub Category': '',
-                        'Main Category': 'Order Type Total',
+                        'Main Category': '',
                         'After Discount': order_total['After Discount'],
                         'CGST': order_total['CGST'],
                         'SGST': order_total['SGST'],
@@ -131,18 +131,22 @@ if uploaded_file is not None:
 
                 final_df = pd.DataFrame(result)
 
-                # Remove repeated values
-                for col in ['Order Type', 'Sub Category']:
-                    final_df[col] = final_df[col].where(final_df[col] != final_df[col].shift(), '')
+                # Remove repeated values only for Sub Category, not Order Type
+                final_df['Sub Category'] = final_df['Sub Category'].where(final_df['Sub Category'] != final_df['Sub Category'].shift(), '')
+                
+                # For Order Type, only remove repetition for non-total rows
+                mask = ~final_df['Order Type'].str.contains('Total', na=False)
+                final_df.loc[mask, 'Order Type'] = final_df.loc[mask, 'Order Type'].where(
+                    final_df.loc[mask, 'Order Type'] != final_df.loc[mask, 'Order Type'].shift(), '')
 
                 return final_df
 
             # Build the final report
             final = build_final_table(grouped)
 
-            # Add Grand Total
-            totals_to_include = ['Dine-In', 'Take-Away', 'Delivery']
-            grand_rows = final[final['Order Type'].isin(totals_to_include) & (final['Main Category'] == 'Order Type Total')]
+            # Add Grand Total (using Order Type totals)
+            order_type_totals = ['Dine-In Total', 'Take-Away Total', 'Delivery Total']
+            grand_rows = final[final['Order Type'].isin(order_type_totals)]
 
             grand_total = {
                 'Order Type': 'Grand Total',
@@ -184,21 +188,21 @@ if uploaded_file is not None:
                 'border': 1
             })
             
-            category_total_format = workbook.add_format({
+            subcategory_total_format = workbook.add_format({
                 'bold': True,
-                'fg_color': '#FFE699',  # Yellow for Category Total
+                'fg_color': '#E6F3FF',  # Light Blue for Subcategory Total
                 'border': 1
             })
             
             order_type_total_format = workbook.add_format({
                 'bold': True,
-                'fg_color': '#F4B084',  # Orange for Order Type Total
+                'fg_color': '#FFE699',  # Yellow for Order Type Total
                 'border': 1
             })
             
             grand_total_format = workbook.add_format({
                 'bold': True,
-                'fg_color': '#C6E0B4',  # Green for Grand Total
+                'fg_color': '#F8CBAD',  # Orange for Grand Total
                 'border': 1
             })
             
@@ -213,16 +217,16 @@ if uploaded_file is not None:
                 if row_num-1 >= len(final):
                     continue
                     
-                main_category = final.iloc[row_num-1]['Main Category']
-                order_type = final.iloc[row_num-1]['Order Type']
+                order_type = str(final.iloc[row_num-1]['Order Type'])
+                sub_category = str(final.iloc[row_num-1]['Sub Category'])
                 
                 # Determine the format based on content
-                if 'Grand Total' in str(order_type):
+                if 'Grand Total' in order_type:
                     cell_format = grand_total_format
-                elif main_category == 'Order Type Total':
+                elif any(total in order_type for total in ['Dine-In Total', 'Take-Away Total', 'Delivery Total']):
                     cell_format = order_type_total_format
-                elif main_category == 'Category Total':
-                    cell_format = category_total_format
+                elif 'Total' in sub_category:
+                    cell_format = subcategory_total_format
                 else:
                     cell_format = normal_format
                 
@@ -260,7 +264,7 @@ st.markdown("""
 4. Download the final Excel file with highlighted totals
 
 **Color Coding in Excel:**
-- 🟡 Yellow: Category Total (Subcategory level)
-- 🟠 Orange: Order Type Total (Dine-In/Take-Away/Delivery level)
-- 🟢 Green: Grand Total
+- 🔵 Light Blue: Subcategory Total
+- 🟡 Yellow: Order Type Total (Dine-In Total, Take-Away Total, Delivery Total)
+- 🟠 Orange: Grand Total
 """)
