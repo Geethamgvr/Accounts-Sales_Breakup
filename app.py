@@ -103,12 +103,12 @@ if uploaded_file is not None:
                             })
                             order_type_written = True
 
-                        # Subcategory total
+                        # Subcategory total (Category Total)
                         subtotal = sdf.select_dtypes(include='number').sum()
                         result.append({
                             'Order Type': '',
-                            'Sub Category': f"{sub_cat} Total",
-                            'Main Category': '',
+                            'Sub Category': f"{sub_cat}",
+                            'Main Category': 'Category Total',
                             'After Discount': subtotal['After Discount'],
                             'CGST': subtotal['CGST'],
                             'SGST': subtotal['SGST'],
@@ -116,31 +116,18 @@ if uploaded_file is not None:
                             'Total Price': subtotal['Total Price']
                         })
 
-                    # Order Type total
+                    # Order Type total (Order Type Total)
                     order_total = odf.select_dtypes(include='number').sum()
                     result.append({
                         'Order Type': order_type,
-                        'Sub Category': f"{order_type.strip()} Total",
-                        'Main Category': '',
+                        'Sub Category': '',
+                        'Main Category': 'Order Type Total',
                         'After Discount': order_total['After Discount'],
                         'CGST': order_total['CGST'],
                         'SGST': order_total['SGST'],
                         'Delivery Charge': order_total['Delivery Charge'],
                         'Total Price': order_total['Total Price']
                     })
-                    
-                    # Add empty line after Take-Away section
-                    if order_type == 'Take-Away':
-                        result.append({
-                            'Order Type': '',
-                            'Sub Category': '',
-                            'Main Category': '',
-                            'After Discount': '',
-                            'CGST': '',
-                            'SGST': '',
-                            'Delivery Charge': '',
-                            'Total Price': ''
-                        })
 
                 final_df = pd.DataFrame(result)
 
@@ -153,9 +140,9 @@ if uploaded_file is not None:
             # Build the final report
             final = build_final_table(grouped)
 
-            # Add Grand Total (only Delivery, Dine-In, Take-Away)
-            totals_to_include = ['Delivery Total', 'Dine-In Total', 'Take-Away Total']
-            grand_rows = final[final['Sub Category'].isin(totals_to_include)]
+            # Add Grand Total
+            totals_to_include = ['Dine-In', 'Take-Away', 'Delivery']
+            grand_rows = final[final['Order Type'].isin(totals_to_include) & (final['Main Category'] == 'Order Type Total')]
 
             grand_total = {
                 'Order Type': 'Grand Total',
@@ -197,15 +184,21 @@ if uploaded_file is not None:
                 'border': 1
             })
             
-            total_format = workbook.add_format({
+            category_total_format = workbook.add_format({
                 'bold': True,
-                'fg_color': '#FFE699',
+                'fg_color': '#FFE699',  # Yellow for Category Total
+                'border': 1
+            })
+            
+            order_type_total_format = workbook.add_format({
+                'bold': True,
+                'fg_color': '#F4B084',  # Orange for Order Type Total
                 'border': 1
             })
             
             grand_total_format = workbook.add_format({
                 'bold': True,
-                'fg_color': '#F8CBAD',
+                'fg_color': '#C6E0B4',  # Green for Grand Total
                 'border': 1
             })
             
@@ -217,20 +210,25 @@ if uploaded_file is not None:
             
             # Apply formatting to data rows
             for row_num in range(1, len(final) + 1):
-                sub_category = final.iloc[row_num-1]['Sub Category'] if row_num-1 < len(final) else ''
-                order_type = final.iloc[row_num-1]['Order Type'] if row_num-1 < len(final) else ''
+                if row_num-1 >= len(final):
+                    continue
+                    
+                main_category = final.iloc[row_num-1]['Main Category']
+                order_type = final.iloc[row_num-1]['Order Type']
                 
                 # Determine the format based on content
                 if 'Grand Total' in str(order_type):
                     cell_format = grand_total_format
-                elif 'Total' in str(sub_category):
-                    cell_format = total_format
+                elif main_category == 'Order Type Total':
+                    cell_format = order_type_total_format
+                elif main_category == 'Category Total':
+                    cell_format = category_total_format
                 else:
                     cell_format = normal_format
                 
                 # Apply format to all cells in the row
                 for col_num in range(len(final.columns)):
-                    value = final.iloc[row_num-1, col_num] if row_num-1 < len(final) else ''
+                    value = final.iloc[row_num-1, col_num]
                     worksheet.write(row_num, col_num, value, cell_format)
             
             # Auto-adjust column widths
@@ -260,4 +258,9 @@ st.markdown("""
 2. The application will process your data
 3. Preview the processed report
 4. Download the final Excel file with highlighted totals
+
+**Color Coding in Excel:**
+- 🟡 Yellow: Category Total (Subcategory level)
+- 🟠 Orange: Order Type Total (Dine-In/Take-Away/Delivery level)
+- 🟢 Green: Grand Total
 """)
