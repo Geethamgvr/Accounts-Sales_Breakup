@@ -4,7 +4,6 @@ import streamlit as st
 from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-from openpyxl.utils.dataframe import dataframe_to_rows
 
 st.set_page_config(page_title="Bill-wise Item Sales", layout="wide")
 
@@ -22,19 +21,19 @@ st.markdown("""
         font-weight: bold !important;
     }
     /* Item rows - distinct colors per captain */
-    .captain-0-items {
+    .captain-color-0 {
         background-color: #e6ffe6 !important;  /* Light green for first captain */
     }
-    .captain-1-items {
+    .captain-color-1 {
         background-color: #e6f0ff !important;  /* Light blue for second captain */
     }
-    .captain-2-items {
+    .captain-color-2 {
         background-color: #fff2e6 !important;  /* Light orange for third captain */
     }
-    .captain-3-items {
+    .captain-color-3 {
         background-color: #ffe6f0 !important;  /* Light pink for fourth captain */
     }
-    .captain-4-items {
+    .captain-color-4 {
         background-color: #f0e6ff !important;  /* Light purple for fifth captain */
     }
     /* Auto-fit columns */
@@ -138,13 +137,14 @@ if uploaded_file is not None:
             # Track item-wise totals
             item_totals = {}
             
-            # Track which items belong to which captain for coloring
-            captain_item_mapping = {}
+            # Create a mapping of captain to color index
+            captain_color_map = {}
+            for i, captain in enumerate(unique_captains):
+                captain_color_map[captain] = i % 5  # Cycle through 5 colors
             
             for captain in unique_captains:
                 captain_data = file[file['Captain Name'] == captain]
                 captain_items = sorted(captain_data['Item Name'].unique())
-                captain_item_mapping[captain] = captain_items
                 
                 # First item for this captain - show captain name
                 first_item = True
@@ -185,7 +185,7 @@ if uploaded_file is not None:
                         item_totals[item] = 0
                     item_totals[item] += total
                     
-                    # Store as integers but will display blanks for zeros
+                    # Store values (blanks for zeros)
                     row = {
                         'Captain Name': captain_display,
                         'Item Name': item,
@@ -193,7 +193,8 @@ if uploaded_file is not None:
                         'Lunch': lunch if lunch > 0 else '',
                         'Snacks': snacks if snacks > 0 else '',
                         'Late Night': late_night if late_night > 0 else '',
-                        'Total': total
+                        'Total': total,
+                        '_captain': captain  # Hidden field for color mapping
                     }
                     all_results.append(row)
             
@@ -205,40 +206,48 @@ if uploaded_file is not None:
                 'Lunch': grand_total_lunch if grand_total_lunch > 0 else '',
                 'Snacks': grand_total_snacks if grand_total_snacks > 0 else '',
                 'Late Night': grand_total_latenight if grand_total_latenight > 0 else '',
-                'Total': grand_total_all
+                'Total': grand_total_all,
+                '_captain': 'GRAND TOTAL'
             }
             all_results.append(grand_total_row)
             
-            # Final dataframe
-            final_result = pd.DataFrame(all_results)
+            # Final dataframe for display (without _captain column)
+            display_results = []
+            for row in all_results:
+                display_row = {k: v for k, v in row.items() if k != '_captain'}
+                display_results.append(display_row)
+            
+            final_result = pd.DataFrame(display_results)
             
             # Display results with colors and auto-fit
             st.subheader("📋 Processed Results")
             
             # Create color mapping function for display
             def color_rows(row):
-                if row['Captain Name'] == 'GRAND TOTAL':
-                    return ['background-color: #d4edda; font-weight: bold'] * len(row)
-                elif row['Captain Name'] != '' and row['Captain Name'] != 'GRAND TOTAL':
-                    # This is a captain header row
-                    return ['background-color: #e6f3ff; font-weight: 500'] * len(row)
-                else:
-                    # This is an item row - find which captain it belongs to
-                    for captain, items in captain_item_mapping.items():
-                        if row['Item Name'] in items:
-                            captain_index = list(captain_item_mapping.keys()).index(captain)
-                            color_class = f'captain-{(captain_index % 5)}-items'
-                            if color_class == 'captain-0-items':
+                # Find the corresponding row in all_results to get _captain
+                for original_row in all_results:
+                    if original_row['Item Name'] == row['Item Name'] and original_row['Total'] == row['Total']:
+                        captain_ref = original_row.get('_captain', '')
+                        
+                        if captain_ref == 'GRAND TOTAL':
+                            return ['background-color: #d4edda; font-weight: bold'] * len(row)
+                        elif row['Captain Name'] != '' and row['Captain Name'] != 'GRAND TOTAL':
+                            # This is a captain header row
+                            return ['background-color: #e6f3ff; font-weight: 500'] * len(row)
+                        else:
+                            # This is an item row - color based on captain
+                            color_index = captain_color_map.get(captain_ref, 0)
+                            if color_index == 0:
                                 return ['background-color: #e6ffe6'] * len(row)  # Light green
-                            elif color_class == 'captain-1-items':
+                            elif color_index == 1:
                                 return ['background-color: #e6f0ff'] * len(row)  # Light blue
-                            elif color_class == 'captain-2-items':
+                            elif color_index == 2:
                                 return ['background-color: #fff2e6'] * len(row)  # Light orange
-                            elif color_class == 'captain-3-items':
+                            elif color_index == 3:
                                 return ['background-color: #ffe6f0'] * len(row)  # Light pink
-                            elif color_class == 'captain-4-items':
+                            elif color_index == 4:
                                 return ['background-color: #f0e6ff'] * len(row)  # Light purple
-                            break
+                        break
                 return [''] * len(row)
             
             # Apply styling
@@ -296,15 +305,15 @@ if uploaded_file is not None:
                 ws = wb.active
                 ws.title = "Sales Data"
                 
-                # Define colors (RGB hex to Excel fill)
+                # Define colors
                 colors = {
                     'captain_header': PatternFill(start_color='E6F3FF', end_color='E6F3FF', fill_type='solid'),
                     'grand_total': PatternFill(start_color='D4EDDA', end_color='D4EDDA', fill_type='solid'),
-                    'captain_0': PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),  # Light green
-                    'captain_1': PatternFill(start_color='E6F0FF', end_color='E6F0FF', fill_type='solid'),  # Light blue
-                    'captain_2': PatternFill(start_color='FFF2E6', end_color='FFF2E6', fill_type='solid'),  # Light orange
-                    'captain_3': PatternFill(start_color='FFE6F0', end_color='FFE6F0', fill_type='solid'),  # Light pink
-                    'captain_4': PatternFill(start_color='F0E6FF', end_color='F0E6FF', fill_type='solid'),  # Light purple
+                    0: PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),  # Light green
+                    1: PatternFill(start_color='E6F0FF', end_color='E6F0FF', fill_type='solid'),  # Light blue
+                    2: PatternFill(start_color='FFF2E6', end_color='FFF2E6', fill_type='solid'),  # Light orange
+                    3: PatternFill(start_color='FFE6F0', end_color='FFE6F0', fill_type='solid'),  # Light pink
+                    4: PatternFill(start_color='F0E6FF', end_color='F0E6FF', fill_type='solid'),  # Light purple
                 }
                 
                 # Add headers
@@ -331,14 +340,10 @@ if uploaded_file is not None:
                         row_color = colors['captain_header']
                         font = Font(bold=False)
                     else:
-                        # Find which captain this item belongs to
-                        row_color = colors['captain_0']  # default to light green
-                        for captain, items in captain_item_mapping.items():
-                            if row_data['Item Name'] in items:
-                                captain_index = list(captain_item_mapping.keys()).index(captain)
-                                color_key = f'captain_{(captain_index % 5)}'
-                                row_color = colors.get(color_key, colors['captain_0'])
-                                break
+                        # Get color based on captain
+                        captain_ref = row_data.get('_captain', '')
+                        color_index = captain_color_map.get(captain_ref, 0)
+                        row_color = colors.get(color_index, colors[0])
                         font = Font(bold=False)
                     
                     for col_num, col_name in enumerate(headers, 1):
