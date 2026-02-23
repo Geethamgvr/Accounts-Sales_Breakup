@@ -21,21 +21,21 @@ st.markdown("""
         background-color: #d4edda !important;
         font-weight: bold !important;
     }
-    /* Item rows - alternating subtle colors per captain */
+    /* Item rows - distinct colors per captain */
+    .captain-0-items {
+        background-color: #e6ffe6 !important;  /* Light green for first captain */
+    }
     .captain-1-items {
-        background-color: #fff2e6 !important;  /* Light orange for captain 1 items */
+        background-color: #e6f0ff !important;  /* Light blue for second captain */
     }
     .captain-2-items {
-        background-color: #e6f0ff !important;  /* Light blue for captain 2 items */
+        background-color: #fff2e6 !important;  /* Light orange for third captain */
     }
     .captain-3-items {
-        background-color: #e6ffe6 !important;  /* Light green for captain 3 items */
+        background-color: #ffe6f0 !important;  /* Light pink for fourth captain */
     }
     .captain-4-items {
-        background-color: #ffe6f0 !important;  /* Light pink for captain 4 items */
-    }
-    .captain-5-items {
-        background-color: #f0e6ff !important;  /* Light purple for captain 5 items */
+        background-color: #f0e6ff !important;  /* Light purple for fifth captain */
     }
     /* Auto-fit columns */
     .dataframe-container {
@@ -166,7 +166,7 @@ if uploaded_file is not None:
                     else:
                         captain_display = ''
                     
-                    # Get values and add to grand totals
+                    # Get values - replace 0 with empty string for display
                     breakfast = int(pivot.get('Breakfast', 0))
                     lunch = int(pivot.get('Lunch', 0))
                     snacks = int(pivot.get('Snacks', 0))
@@ -185,13 +185,14 @@ if uploaded_file is not None:
                         item_totals[item] = 0
                     item_totals[item] += total
                     
+                    # Store as integers but will display blanks for zeros
                     row = {
                         'Captain Name': captain_display,
                         'Item Name': item,
-                        'Breakfast': breakfast,
-                        'Lunch': lunch,
-                        'Snacks': snacks,
-                        'Late Night': late_night,
+                        'Breakfast': breakfast if breakfast > 0 else '',
+                        'Lunch': lunch if lunch > 0 else '',
+                        'Snacks': snacks if snacks > 0 else '',
+                        'Late Night': late_night if late_night > 0 else '',
                         'Total': total
                     }
                     all_results.append(row)
@@ -200,10 +201,10 @@ if uploaded_file is not None:
             grand_total_row = {
                 'Captain Name': 'GRAND TOTAL',
                 'Item Name': '--- ALL ITEMS TOTAL ---',
-                'Breakfast': grand_total_breakfast,
-                'Lunch': grand_total_lunch,
-                'Snacks': grand_total_snacks,
-                'Late Night': grand_total_latenight,
+                'Breakfast': grand_total_breakfast if grand_total_breakfast > 0 else '',
+                'Lunch': grand_total_lunch if grand_total_lunch > 0 else '',
+                'Snacks': grand_total_snacks if grand_total_snacks > 0 else '',
+                'Late Night': grand_total_latenight if grand_total_latenight > 0 else '',
                 'Total': grand_total_all
             }
             all_results.append(grand_total_row)
@@ -226,17 +227,17 @@ if uploaded_file is not None:
                     for captain, items in captain_item_mapping.items():
                         if row['Item Name'] in items:
                             captain_index = list(captain_item_mapping.keys()).index(captain)
-                            color_class = f'captain-{(captain_index % 5) + 1}-items'
-                            if color_class == 'captain-1-items':
-                                return ['background-color: #fff2e6'] * len(row)
+                            color_class = f'captain-{(captain_index % 5)}-items'
+                            if color_class == 'captain-0-items':
+                                return ['background-color: #e6ffe6'] * len(row)  # Light green
+                            elif color_class == 'captain-1-items':
+                                return ['background-color: #e6f0ff'] * len(row)  # Light blue
                             elif color_class == 'captain-2-items':
-                                return ['background-color: #e6f0ff'] * len(row)
+                                return ['background-color: #fff2e6'] * len(row)  # Light orange
                             elif color_class == 'captain-3-items':
-                                return ['background-color: #e6ffe6'] * len(row)
+                                return ['background-color: #ffe6f0'] * len(row)  # Light pink
                             elif color_class == 'captain-4-items':
-                                return ['background-color: #ffe6f0'] * len(row)
-                            elif color_class == 'captain-5-items':
-                                return ['background-color: #f0e6ff'] * len(row)
+                                return ['background-color: #f0e6ff'] * len(row)  # Light purple
                             break
                 return [''] * len(row)
             
@@ -295,15 +296,15 @@ if uploaded_file is not None:
                 ws = wb.active
                 ws.title = "Sales Data"
                 
-                # Define colors (RGB hex to Excel index mapping)
+                # Define colors (RGB hex to Excel fill)
                 colors = {
                     'captain_header': PatternFill(start_color='E6F3FF', end_color='E6F3FF', fill_type='solid'),
                     'grand_total': PatternFill(start_color='D4EDDA', end_color='D4EDDA', fill_type='solid'),
-                    'captain_1': PatternFill(start_color='FFF2E6', end_color='FFF2E6', fill_type='solid'),
-                    'captain_2': PatternFill(start_color='E6F0FF', end_color='E6F0FF', fill_type='solid'),
-                    'captain_3': PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),
-                    'captain_4': PatternFill(start_color='FFE6F0', end_color='FFE6F0', fill_type='solid'),
-                    'captain_5': PatternFill(start_color='F0E6FF', end_color='F0E6FF', fill_type='solid'),
+                    'captain_0': PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),  # Light green
+                    'captain_1': PatternFill(start_color='E6F0FF', end_color='E6F0FF', fill_type='solid'),  # Light blue
+                    'captain_2': PatternFill(start_color='FFF2E6', end_color='FFF2E6', fill_type='solid'),  # Light orange
+                    'captain_3': PatternFill(start_color='FFE6F0', end_color='FFE6F0', fill_type='solid'),  # Light pink
+                    'captain_4': PatternFill(start_color='F0E6FF', end_color='F0E6FF', fill_type='solid'),  # Light purple
                 }
                 
                 # Add headers
@@ -331,12 +332,12 @@ if uploaded_file is not None:
                         font = Font(bold=False)
                     else:
                         # Find which captain this item belongs to
-                        row_color = colors['captain_1']  # default
+                        row_color = colors['captain_0']  # default to light green
                         for captain, items in captain_item_mapping.items():
                             if row_data['Item Name'] in items:
                                 captain_index = list(captain_item_mapping.keys()).index(captain)
-                                color_key = f'captain_{(captain_index % 5) + 1}'
-                                row_color = colors.get(color_key, colors['captain_1'])
+                                color_key = f'captain_{(captain_index % 5)}'
+                                row_color = colors.get(color_key, colors['captain_0'])
                                 break
                         font = Font(bold=False)
                     
