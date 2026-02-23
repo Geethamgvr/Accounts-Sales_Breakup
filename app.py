@@ -72,6 +72,13 @@ if uploaded_file is not None:
             unique_captains = sorted(file['Captain Name'].unique())
             all_results = []
             
+            # Track grand totals
+            grand_total_breakfast = 0
+            grand_total_lunch = 0
+            grand_total_snacks = 0
+            grand_total_latenight = 0
+            grand_total_all = 0
+            
             for captain in unique_captains:
                 captain_data = file[file['Captain Name'] == captain]
                 captain_items = sorted(captain_data['Item Name'].unique())
@@ -96,32 +103,42 @@ if uploaded_file is not None:
                     else:
                         captain_display = ''
                     
-                    # Convert to int to remove decimal places
+                    # Get values and add to grand totals
+                    breakfast = int(pivot.get('Breakfast', 0))
+                    lunch = int(pivot.get('Lunch', 0))
+                    snacks = int(pivot.get('Snacks', 0))
+                    late_night = int(pivot.get('Late Night', 0))
+                    total = breakfast + lunch + snacks + late_night
+                    
+                    # Add to grand totals
+                    grand_total_breakfast += breakfast
+                    grand_total_lunch += lunch
+                    grand_total_snacks += snacks
+                    grand_total_latenight += late_night
+                    grand_total_all += total
+                    
                     row = {
                         'Captain Name': captain_display,
                         'Item Name': item,
-                        'Breakfast': int(pivot.get('Breakfast', 0)),
-                        'Lunch': int(pivot.get('Lunch', 0)),
-                        'Snacks': int(pivot.get('Snacks', 0)),
-                        'Late Night': int(pivot.get('Late Night', 0))
+                        'Breakfast': breakfast,
+                        'Lunch': lunch,
+                        'Snacks': snacks,
+                        'Late Night': late_night,
+                        'Total': total
                     }
-                    row['Total'] = (row['Breakfast'] + row['Lunch'] + 
-                                  row['Snacks'] + row['Late Night'])
                     all_results.append(row)
-                
-                # Captain total
-                captain_total = captain_data.groupby('Time Category')['Quantity'].sum()
-                total_row = {
-                    'Captain Name': '',
-                    'Item Name': '--- CAPTAIN TOTAL ---',
-                    'Breakfast': int(captain_total.get('Breakfast', 0)),
-                    'Lunch': int(captain_total.get('Lunch', 0)),
-                    'Snacks': int(captain_total.get('Snacks', 0)),
-                    'Late Night': int(captain_total.get('Late Night', 0))
-                }
-                total_row['Total'] = (total_row['Breakfast'] + total_row['Lunch'] + 
-                                    total_row['Snacks'] + total_row['Late Night'])
-                all_results.append(total_row)
+            
+            # Add grand total row at the bottom
+            grand_total_row = {
+                'Captain Name': 'GRAND TOTAL',
+                'Item Name': '--- ALL ITEMS TOTAL ---',
+                'Breakfast': grand_total_breakfast,
+                'Lunch': grand_total_lunch,
+                'Snacks': grand_total_snacks,
+                'Late Night': grand_total_latenight,
+                'Total': grand_total_all
+            }
+            all_results.append(grand_total_row)
             
             # Final dataframe
             final_result = pd.DataFrame(all_results)
@@ -134,23 +151,16 @@ if uploaded_file is not None:
             st.subheader("Summary")
             col1, col2, col3, col4, col5 = st.columns(5)
             
-            # Calculate totals with int conversion
-            items_total = int(final_result[final_result['Item Name'] != '--- CAPTAIN TOTAL ---']['Total'].sum())
-            breakfast_total = int(final_result['Breakfast'].sum())
-            lunch_total = int(final_result['Lunch'].sum())
-            snacks_total = int(final_result['Snacks'].sum())
-            latenight_total = int(final_result['Late Night'].sum())
-            
             with col1:
-                st.metric("Total Items", items_total)
+                st.metric("Total Items", grand_total_all)
             with col2:
-                st.metric("Breakfast", breakfast_total)
+                st.metric("Breakfast", grand_total_breakfast)
             with col3:
-                st.metric("Lunch", lunch_total)
+                st.metric("Lunch", grand_total_lunch)
             with col4:
-                st.metric("Snacks", snacks_total)
+                st.metric("Snacks", grand_total_snacks)
             with col5:
-                st.metric("Late Night", latenight_total)
+                st.metric("Late Night", grand_total_latenight)
             
             # Download buttons
             st.subheader("Download")
