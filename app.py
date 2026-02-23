@@ -21,19 +21,19 @@ st.markdown("""
         font-weight: bold !important;
     }
     /* Item rows - distinct colors per captain */
-    .captain-0 {
+    .captain-color-0 {
         background-color: #e6ffe6 !important;  /* Light green */
     }
-    .captain-1 {
+    .captain-color-1 {
         background-color: #e6f0ff !important;  /* Light blue */
     }
-    .captain-2 {
+    .captain-color-2 {
         background-color: #fff2e6 !important;  /* Light orange */
     }
-    .captain-3 {
+    .captain-color-3 {
         background-color: #ffe6f0 !important;  /* Light pink */
     }
-    .captain-4 {
+    .captain-color-4 {
         background-color: #f0e6ff !important;  /* Light purple */
     }
     /* Auto-fit columns */
@@ -120,6 +120,11 @@ if uploaded_file is not None:
             # Create report
             unique_captains = sorted(file['Captain Name'].unique())
             
+            # Create a mapping of captain to color index
+            captain_to_color = {}
+            for idx, captain in enumerate(unique_captains):
+                captain_to_color[captain] = idx % 5  # Cycle through 5 colors
+            
             # Track grand totals
             grand_total_breakfast = 0
             grand_total_lunch = 0
@@ -137,6 +142,7 @@ if uploaded_file is not None:
             for captain_idx, captain in enumerate(unique_captains):
                 captain_data = file[file['Captain Name'] == captain]
                 captain_items = sorted(captain_data['Item Name'].unique())
+                color_index = captain_to_color[captain]
                 
                 # Add captain header row
                 all_rows.append({
@@ -148,7 +154,7 @@ if uploaded_file is not None:
                     'Late Night': '',
                     'Total': '',
                     'row_type': 'captain_header',
-                    'captain_index': captain_idx
+                    'color_index': color_index  # Store color index for this captain
                 })
                 
                 # Process each item for this captain
@@ -181,7 +187,7 @@ if uploaded_file is not None:
                         item_totals[item] = 0
                     item_totals[item] += total
                     
-                    # Add item row
+                    # Add item row with same color index as its captain
                     all_rows.append({
                         'Captain Name': '',
                         'Item Name': item,
@@ -191,7 +197,7 @@ if uploaded_file is not None:
                         'Late Night': late_night if late_night > 0 else '',
                         'Total': total,
                         'row_type': 'item',
-                        'captain_index': captain_idx
+                        'color_index': color_index  # Same color as captain
                     })
             
             # Add grand total row
@@ -204,7 +210,7 @@ if uploaded_file is not None:
                 'Late Night': grand_total_latenight if grand_total_latenight > 0 else '',
                 'Total': grand_total_all,
                 'row_type': 'grand_total',
-                'captain_index': -1
+                'color_index': -1
             })
             
             # Create dataframe
@@ -216,41 +222,33 @@ if uploaded_file is not None:
             # Define color mapping function
             def color_rows(row):
                 styles = []
+                color_map = {
+                    0: 'background-color: #e6ffe6',  # Light green
+                    1: 'background-color: #e6f0ff',  # Light blue
+                    2: 'background-color: #fff2e6',  # Light orange
+                    3: 'background-color: #ffe6f0',  # Light pink
+                    4: 'background-color: #f0e6ff',  # Light purple
+                }
+                
                 for col in row.index:
                     if row['row_type'] == 'grand_total':
                         styles.append('background-color: #d4edda; font-weight: bold')
                     elif row['row_type'] == 'captain_header':
                         styles.append('background-color: #e6f3ff; font-weight: 500')
                     elif row['row_type'] == 'item':
-                        # Color based on captain index
-                        color_map = {
-                            0: 'background-color: #e6ffe6',
-                            1: 'background-color: #e6f0ff',
-                            2: 'background-color: #fff2e6',
-                            3: 'background-color: #ffe6f0',
-                            4: 'background-color: #f0e6ff',
-                        }
-                        color = color_map.get(row['captain_index'] % 5, 'background-color: #f5f5f5')
+                        # Use the stored color_index
+                        color = color_map.get(row['color_index'], 'background-color: #f5f5f5')
                         styles.append(color)
                     else:
                         styles.append('')
                 return styles
             
-            # Apply styling and select columns for display
+            # Apply styling
             styled_df = df_display.style.apply(color_rows, axis=1)
             
-            # Display the styled dataframe with only the columns we want
+            # Display the styled dataframe
             st.dataframe(
-                styled_df.format(precision=0),
-                column_config={
-                    "Captain Name": "Captain Name",
-                    "Item Name": "Item Name",
-                    "Breakfast": "Breakfast",
-                    "Lunch": "Lunch",
-                    "Snacks": "Snacks",
-                    "Late Night": "Late Night",
-                    "Total": "Total"
-                },
+                styled_df[['Captain Name', 'Item Name', 'Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total']],
                 use_container_width=True,
                 height=500,
                 hide_index=True
@@ -304,11 +302,11 @@ if uploaded_file is not None:
                 colors = {
                     'captain_header': PatternFill(start_color='E6F3FF', end_color='E6F3FF', fill_type='solid'),
                     'grand_total': PatternFill(start_color='D4EDDA', end_color='D4EDDA', fill_type='solid'),
-                    0: PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),
-                    1: PatternFill(start_color='E6F0FF', end_color='E6F0FF', fill_type='solid'),
-                    2: PatternFill(start_color='FFF2E6', end_color='FFF2E6', fill_type='solid'),
-                    3: PatternFill(start_color='FFE6F0', end_color='FFE6F0', fill_type='solid'),
-                    4: PatternFill(start_color='F0E6FF', end_color='F0E6FF', fill_type='solid'),
+                    0: PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),  # Light green
+                    1: PatternFill(start_color='E6F0FF', end_color='E6F0FF', fill_type='solid'),  # Light blue
+                    2: PatternFill(start_color='FFF2E6', end_color='FFF2E6', fill_type='solid'),  # Light orange
+                    3: PatternFill(start_color='FFE6F0', end_color='FFE6F0', fill_type='solid'),  # Light pink
+                    4: PatternFill(start_color='F0E6FF', end_color='F0E6FF', fill_type='solid'),  # Light purple
                 }
                 
                 # Add headers
@@ -334,8 +332,8 @@ if uploaded_file is not None:
                     elif row_data['row_type'] == 'captain_header':
                         row_color = colors['captain_header']
                         font = Font(bold=True)
-                    else:
-                        color_index = row_data['captain_index'] % 5
+                    else:  # item row
+                        color_index = row_data['color_index']
                         row_color = colors.get(color_index, colors[0])
                         font = Font(bold=False)
                     
@@ -376,9 +374,9 @@ if uploaded_file is not None:
                 )
             
             with col2:
-                # Prepare CSV data (without metadata columns)
+                # Prepare CSV data
                 csv_df = pd.DataFrame([
-                    {k: v for k, v in row.items() if k not in ['row_type', 'captain_index']}
+                    {k: v for k, v in row.items() if k not in ['row_type', 'color_index']}
                     for row in all_rows
                 ])
                 csv_data = csv_df.to_csv(index=False).encode('utf-8')
