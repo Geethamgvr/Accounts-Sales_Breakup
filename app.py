@@ -5,6 +5,32 @@ from io import BytesIO
 
 st.set_page_config(page_title="Bill-wise Item Sales", layout="wide")
 
+# Custom CSS for colors
+st.markdown("""
+<style>
+    /* Captain name rows - light blue background */
+    .captain-row {
+        background-color: #e6f3ff !important;
+    }
+    /* Grand total row - light green background */
+    .grandtotal-row {
+        background-color: #d4edda !important;
+        font-weight: bold !important;
+    }
+    /* Item rows - alternating subtle gray */
+    .item-row-even {
+        background-color: #f9f9f9 !important;
+    }
+    .item-row-odd {
+        background-color: #ffffff !important;
+    }
+    /* Style the dataframe container */
+    .dataframe-container {
+        font-size: 14px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("📊 Bill-wise Item Sales Processor")
 st.write("Upload your CSV file to generate the report")
 
@@ -79,6 +105,9 @@ if uploaded_file is not None:
             grand_total_latenight = 0
             grand_total_all = 0
             
+            # Track row index for alternating colors
+            row_counter = 0
+            
             for captain in unique_captains:
                 captain_data = file[file['Captain Name'] == captain]
                 captain_items = sorted(captain_data['Item Name'].unique())
@@ -117,6 +146,13 @@ if uploaded_file is not None:
                     grand_total_latenight += late_night
                     grand_total_all += total
                     
+                    # Add styling class based on row type
+                    if captain_display:  # This is a captain name row
+                        row_class = 'captain-row'
+                    else:  # Regular item row
+                        row_class = f'item-row-{"even" if row_counter % 2 == 0 else "odd"}'
+                        row_counter += 1
+                    
                     row = {
                         'Captain Name': captain_display,
                         'Item Name': item,
@@ -124,7 +160,8 @@ if uploaded_file is not None:
                         'Lunch': lunch,
                         'Snacks': snacks,
                         'Late Night': late_night,
-                        'Total': total
+                        'Total': total,
+                        '_class': row_class  # Hidden column for styling
                     }
                     all_results.append(row)
             
@@ -136,16 +173,37 @@ if uploaded_file is not None:
                 'Lunch': grand_total_lunch,
                 'Snacks': grand_total_snacks,
                 'Late Night': grand_total_latenight,
-                'Total': grand_total_all
+                'Total': grand_total_all,
+                '_class': 'grandtotal-row'
             }
             all_results.append(grand_total_row)
             
             # Final dataframe
             final_result = pd.DataFrame(all_results)
             
-            # Display results
+            # Display results with colors
             st.subheader("Processed Results")
-            st.dataframe(final_result, use_container_width=True)
+            
+            # Apply styling using a function
+            def color_rows(row):
+                if row.get('_class') == 'captain-row':
+                    return ['background-color: #e6f3ff'] * len(row)
+                elif row.get('_class') == 'grandtotal-row':
+                    return ['background-color: #d4edda; font-weight: bold'] * len(row)
+                elif row.get('_class') == 'item-row-even':
+                    return ['background-color: #f9f9f9'] * len(row)
+                elif row.get('_class') == 'item-row-odd':
+                    return ['background-color: #ffffff'] * len(row)
+                return [''] * len(row)
+            
+            # Drop the _class column for display
+            display_df = final_result.drop('_class', axis=1)
+            
+            # Apply styling
+            styled_df = display_df.style.apply(color_rows, axis=1)
+            
+            # Display the styled dataframe
+            st.dataframe(styled_df, use_container_width=True)
             
             # Summary
             st.subheader("Summary")
@@ -162,14 +220,14 @@ if uploaded_file is not None:
             with col5:
                 st.metric("Late Night", grand_total_latenight)
             
-            # Download buttons
+            # Download buttons (without the hidden column)
             st.subheader("Download")
             col1, col2 = st.columns(2)
             
             with col1:
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    final_result.to_excel(writer, index=False, sheet_name='Sales Data')
+                    display_df.to_excel(writer, index=False, sheet_name='Sales Data')
                 
                 st.download_button(
                     label="Download Excel",
@@ -179,7 +237,7 @@ if uploaded_file is not None:
                 )
             
             with col2:
-                csv_data = final_result.to_csv(index=False).encode('utf-8')
+                csv_data = display_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="Download CSV",
                     data=csv_data,
