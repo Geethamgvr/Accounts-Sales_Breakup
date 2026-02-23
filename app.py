@@ -1,270 +1,239 @@
-import streamlit as st
 import pandas as pd
-import numpy as np
+from datetime import time
+import streamlit as st
 from io import BytesIO
 
-# Set page configuration
-st.set_page_config(
-    page_title="Sales Report Generator",
-    page_icon="📊",
-    layout="wide"
-)
-
-# App title and description
-st.title("📊 Sales Report Generator")
-st.markdown("Upload your CSV file to generate a formatted sales report with subtotals and grand totals.")
-
-# File upload section
-st.header("1. Upload Your Data")
-uploaded_file = st.file_uploader("Choose a CSV file", type=['csv'])
-
-# Add some information about expected file format
-with st.expander("Expected file format"):
-    st.markdown("""
-    The application expects a CSV file with the following columns:
-    - Online Reference Name
-    - Table No
-    - Order Type
-    - Main Category
-    - After Discount
-    - CGST
-    - SGST
-    - Delivery Charge
-    - Total Price
+def process_data(df):
+    # Filter for Dine-In orders and remove 'without_captain'
+    file1 = df.iloc[:-1] if len(df) > 0 else df
+    file2 = file1[file1['Order Type'] == 'Dine-In'].copy()
+    file = file2[['Item Name', 'Order Type', 'Quantity', 'Captain Name','Billed Time']]
+    file = file[file['Captain Name'].str.lower() != 'without_captain'].copy()
     
-    The script will skip the first 5 rows of your CSV file.
-    """)
+    # Convert Billed Time to datetime
+    file['Billed Time'] = pd.to_datetime(file['Billed Time'])
+    
+    # Function to categorize time of day
+    def get_time_category(billed_time):
+        t = billed_time.time()
+        
+        if time(6, 0) <= t <= time(11, 00):
+            return 'Breakfast'
+        elif time(11, 1) <= t <= time(16, 0):
+            return 'Lunch'
+        elif time(16, 1) <= t <= time(19, 0):
+            return 'Snacks'
+        else:
+            return 'Late Night'
+    
+    # Add time category column
+    file['Time Category'] = file['Billed Time'].apply(get_time_category)
+    
+    # Function to change the name
+    def Grouped_items(ItemName):
+        item_name = str(ItemName).lower()
+        if "tamilnadu meals" in item_name:
+            return "Tamilnadu Meals"
+        elif 'curd rice' in item_name:
+            return "Classic Curd Rice"
+        elif 'thali' in item_name:
+            return "North Indian Thali"
+        elif "special soup" in item_name:
+            return "Day Spl Soup"
+        elif "tandoori" in item_name:
+            return "Tandoori Platter"
+        elif "kunafa" in item_name:
+            return 'Kunafa_item'
+        elif "fried rice" in item_name:
+            return 'Fried rice'
+        elif "noodles" in item_name:
+            return 'Noodles_Item'
+        elif "falooda" in item_name:
+            return "Falooda_Item"
+        else:
+            return None
+    
+    # Apply to the 'Item Name' column
+    file['Item Name'] = file['Item Name'].apply(Grouped_items)
+    
+    # Remove rows where Item Name is None (unmatched items)
+    file = file.dropna(subset=['Item Name']).copy()
+    
+    st.write(f"Rows after filtering unmatched items: {len(file)}")
+    
+    # Get unique captains
+    unique_captains = sorted(file['Captain Name'].unique())
+    
+    # Create a list to store results
+    all_results = []
+    
+    for captain in unique_captains:
+        # Filter data for current captain
+        captain_data = file[file['Captain Name'] == captain]
+        
+        # Get unique items for this captain
+        captain_items = sorted(captain_data['Item Name'].unique())
+        
+        # Add captain name as a header row (only once per captain)
+        all_results.append({
+            'Captain Name': captain,
+            'Item Name': '',  # Empty for captain header
+            'Breakfast': '',
+            'Lunch': '',
+            'Snacks': '',
+            'Late Night': '',
+            'Total': ''
+        })
+        
+        # Process each item for this captain
+        for item in captain_items:
+            # Filter data for current captain and item
+            item_data = captain_data[captain_data['Item Name'] == item]
+            
+            # Create pivot for this captain-item combination
+            pivot = pd.pivot_table(
+                item_data,
+                values='Quantity',
+                columns='Time Category',
+                aggfunc='sum',
+                fill_value=0
+            )
+            
+            # Create a row for this item (empty captain name)
+            row_data = {
+                'Captain Name': '',  # Empty to avoid repeating captain name
+                'Item Name': item,
+                'Breakfast': pivot.get('Breakfast', 0),
+                'Lunch': pivot.get('Lunch', 0),
+                'Snacks': pivot.get('Snacks', 0),
+                'Late Night': pivot.get('Late Night', 0)
+            }
+            
+            # Calculate total
+            row_data['Total'] = (row_data['Breakfast'] + row_data['Lunch'] + 
+                                row_data['Snacks'] + row_data['Late Night'])
+            
+            all_results.append(row_data)
+        
+        # Add captain total row
+        captain_total = captain_data.groupby('Time Category')['Quantity'].sum()
+        total_row = {
+            'Captain Name': '',
+            'Item Name': '--- CAPTAIN TOTAL ---',
+            'Breakfast': captain_total.get('Breakfast', 0),
+            'Lunch': captain_total.get('Lunch', 0),
+            'Snacks': captain_total.get('Snacks', 0),
+            'Late Night': captain_total.get('Late Night', 0)
+        }
+        total_row['Total'] = (total_row['Breakfast'] + total_row['Lunch'] + 
+                             total_row['Snacks'] + total_row['Late Night'])
+        all_results.append(total_row)
+        
+        # Add empty row between captains
+        all_results.append({
+            'Captain Name': '',
+            'Item Name': '',
+            'Breakfast': '',
+            'Lunch': '',
+            'Snacks': '',
+            'Late Night': '',
+            'Total': ''
+        })
+    
+    # Create final dataframe
+    final_result = pd.DataFrame(all_results)
+    return final_result
+
+# Streamlit app
+st.set_page_config(page_title="Bill-wise Item Sales Processor", layout="wide")
+
+st.title("Bill-wise Item Sales Processor")
+st.write("Upload your CSV file to process the sales data")
+
+# File upload
+uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 
 if uploaded_file is not None:
     try:
-        # Load the data
-        df = pd.read_csv(uploaded_file, skiprows=5).iloc[:-1]
+        # Read the uploaded file
+        df = pd.read_csv(uploaded_file, skiprows=5)
         
-        # Show raw data preview
-        st.header("2. Data Preview")
+        st.success("File uploaded successfully!")
+        
+        # Display sample of uploaded data
+        st.subheader("Sample of Uploaded Data")
         st.dataframe(df.head())
         
-        # Processing steps
-        st.header("3. Processing Data")
-        
-        with st.spinner("Processing your data..."):
-            # Filter Online Reference Name
-            df['Online Reference Name'] = df['Online Reference Name'].astype(str).apply(
-                lambda x: x if 'swiggy' in x.lower() or 'zomato' in x.lower() else '')
-
-            # Classify Table No
-            df['Table No'] = df['Table No'].astype(str).str.lower().apply(
-                lambda x: 'Counter Sweet Sales' if x.startswith('sw') else 'Scrap Sales' if x.startswith('sr') else '')
-
-            # Create Sub Category
-            df['Sub Category'] = df.apply(
-                lambda row: f"{row['Table No']} {row['Online Reference Name']}".strip() if row['Online Reference Name'] else row['Table No'],
-                axis=1
-            )
-
-            # Group and aggregate
-            grouped = df.groupby(['Order Type', 'Sub Category', 'Main Category']).agg({
-                'After Discount': 'sum',
-                'CGST': 'sum',
-                'SGST': 'sum',
-                'Delivery Charge': 'sum',
-                'Total Price': 'sum'
-            }).reset_index()
-
-            # Define custom order for Order Type
-            order_type_order = ['Dine-In', 'Take-Away', 'Delivery']
-            grouped['Order Type'] = pd.Categorical(grouped['Order Type'], categories=order_type_order, ordered=True)
-            grouped = grouped.sort_values(by=['Order Type', 'Sub Category', 'Main Category'])
-
-            # Function to build final output with subtotals
-            def build_final_table(df):
-                result = []
-
-                for order_type in order_type_order:
-                    if order_type not in df['Order Type'].unique():
-                        continue
-                        
-                    odf = df[df['Order Type'] == order_type]
-                    order_type_written = False
-
-                    for sub_cat in odf['Sub Category'].unique():
-                        sdf = odf[odf['Sub Category'] == sub_cat]
-
-                        for _, row in sdf.iterrows():
-                            result.append({
-                                'Order Type': order_type if not order_type_written else '',
-                                'Sub Category': sub_cat,
-                                'Main Category': row['Main Category'],
-                                'After Discount': row['After Discount'],
-                                'CGST': row['CGST'],
-                                'SGST': row['SGST'],
-                                'Delivery Charge': row['Delivery Charge'],
-                                'Total Price': row['Total Price']
-                            })
-                            order_type_written = True
-
-                        # Subcategory total
-                        subtotal = sdf.select_dtypes(include='number').sum()
-                        result.append({
-                            'Order Type': '',
-                            'Sub Category': f"{sub_cat} Total",
-                            'Main Category': '',
-                            'After Discount': subtotal['After Discount'],
-                            'CGST': subtotal['CGST'],
-                            'SGST': subtotal['SGST'],
-                            'Delivery Charge': subtotal['Delivery Charge'],
-                            'Total Price': subtotal['Total Price']
-                        })
-
-                    # Order Type total - modified to differentiate
-                    order_total = odf.select_dtypes(include='number').sum()
-                    result.append({
-                        'Order Type': f"{order_type} Total",  # Changed to include "Total" in Order Type
-                        'Sub Category': '',
-                        'Main Category': '',
-                        'After Discount': order_total['After Discount'],
-                        'CGST': order_total['CGST'],
-                        'SGST': order_total['SGST'],
-                        'Delivery Charge': order_total['Delivery Charge'],
-                        'Total Price': order_total['Total Price']
-                    })
-
-                final_df = pd.DataFrame(result)
-
-                # Remove repeated values only for Sub Category, not Order Type
-                final_df['Sub Category'] = final_df['Sub Category'].where(final_df['Sub Category'] != final_df['Sub Category'].shift(), '')
+        # Process button
+        if st.button("Process Data"):
+            with st.spinner("Processing data..."):
+                # Process the data
+                result_df = process_data(df)
                 
-                # For Order Type, only remove repetition for non-total rows
-                mask = ~final_df['Order Type'].str.contains('Total', na=False)
-                final_df.loc[mask, 'Order Type'] = final_df.loc[mask, 'Order Type'].where(
-                    final_df.loc[mask, 'Order Type'] != final_df.loc[mask, 'Order Type'].shift(), '')
-
-                return final_df
-
-            # Build the final report
-            final = build_final_table(grouped)
-
-            # Add Grand Total (using Order Type totals)
-            order_type_totals = ['Dine-In Total', 'Take-Away Total', 'Delivery Total']
-            grand_rows = final[final['Order Type'].isin(order_type_totals)]
-
-            grand_total = {
-                'Order Type': 'Grand Total',
-                'Sub Category': '',
-                'Main Category': '',
-                'After Discount': grand_rows['After Discount'].sum(),
-                'CGST': grand_rows['CGST'].sum(),
-                'SGST': grand_rows['SGST'].sum(),
-                'Delivery Charge': grand_rows['Delivery Charge'].sum(),
-                'Total Price': grand_rows['Total Price'].sum()
-            }
-
-            final = pd.concat([final, pd.DataFrame([grand_total])], ignore_index=True)
-        
-        st.success("✅ Data processed successfully!")
-        
-        # Show processed data
-        st.header("4. Processed Report Preview")
-        st.dataframe(final)
-        
-        # Download section
-        st.header("5. Download Report")
-        
-        # Create a BytesIO buffer for the Excel file with formatting
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            final.to_excel(writer, index=False, sheet_name='Sales Report')
-            
-            # Get the xlsxwriter workbook and worksheet objects
-            workbook = writer.book
-            worksheet = writer.sheets['Sales Report']
-            
-            # Define formats
-            header_format = workbook.add_format({
-                'bold': True,
-                'text_wrap': True,
-                'valign': 'top',
-                'fg_color': '#D7E4BC',
-                'border': 1
-            })
-            
-            subcategory_total_format = workbook.add_format({
-                'bold': True,
-                'fg_color': '#E6F3FF',  # Light Blue for Subcategory Total
-                'border': 1
-            })
-            
-            order_type_total_format = workbook.add_format({
-                'bold': True,
-                'fg_color': '#FFE699',  # Yellow for Order Type Total
-                'border': 1
-            })
-            
-            grand_total_format = workbook.add_format({
-                'bold': True,
-                'fg_color': '#F8CBAD',  # Orange for Grand Total
-                'border': 1
-            })
-            
-            normal_format = workbook.add_format({'border': 1})
-            
-            # Apply header format
-            for col_num, value in enumerate(final.columns.values):
-                worksheet.write(0, col_num, value, header_format)
-            
-            # Apply formatting to data rows
-            for row_num in range(1, len(final) + 1):
-                if row_num-1 >= len(final):
-                    continue
-                    
-                order_type = str(final.iloc[row_num-1]['Order Type'])
-                sub_category = str(final.iloc[row_num-1]['Sub Category'])
+                # Display results
+                st.subheader("Processed Results")
                 
-                # Determine the format based on content
-                if 'Grand Total' in order_type:
-                    cell_format = grand_total_format
-                elif any(total in order_type for total in ['Dine-In Total', 'Take-Away Total', 'Delivery Total']):
-                    cell_format = order_type_total_format
-                elif 'Total' in sub_category:
-                    cell_format = subcategory_total_format
-                else:
-                    cell_format = normal_format
+                # Format numerical columns for display
+                display_df = result_df.copy()
+                numeric_cols = ['Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total']
+                for col in numeric_cols:
+                    display_df[col] = pd.to_numeric(display_df[col], errors='coerce').fillna(0).astype(int)
                 
-                # Apply format to all cells in the row
-                for col_num in range(len(final.columns)):
-                    value = final.iloc[row_num-1, col_num]
-                    worksheet.write(row_num, col_num, value, cell_format)
-            
-            # Auto-adjust column widths
-            for i, col in enumerate(final.columns):
-                max_len = max(final[col].astype(str).str.len().max(), len(col)) + 2
-                worksheet.set_column(i, i, max_len)
-        
-        # Create download button
-        st.download_button(
-            label="📥 Download Excel Report",
-            data=output.getvalue(),
-            file_name="Final_Sales_Report.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        
+                st.dataframe(display_df, use_container_width=True)
+                
+                # Create download button for processed data
+                output = BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    result_df.to_excel(writer, index=False, sheet_name='Sales Data')
+                
+                st.download_button(
+                    label="Download Processed Data (Excel)",
+                    data=output.getvalue(),
+                    file_name="processed_sales_data.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+                
+                # Also provide CSV download option
+                csv_data = result_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download Processed Data (CSV)",
+                    data=csv_data,
+                    file_name="processed_sales_data.csv",
+                    mime="text/csv"
+                )
+                
+                # Show summary statistics
+                st.subheader("Summary Statistics")
+                
+                # Calculate totals only from numeric rows
+                numeric_rows = display_df[pd.to_numeric(display_df['Total'], errors='coerce').notna()]
+                
+                col1, col2, col3, col4, col5 = st.columns(5)
+                
+                with col1:
+                    st.metric("Total Items Sold", int(numeric_rows[numeric_rows['Item Name'] != '--- CAPTAIN TOTAL ---']['Total'].sum()))
+                with col2:
+                    st.metric("Breakfast Total", int(numeric_rows['Breakfast'].sum()))
+                with col3:
+                    st.metric("Lunch Total", int(numeric_rows['Lunch'].sum()))
+                with col4:
+                    st.metric("Snacks Total", int(numeric_rows['Snacks'].sum()))
+                with col5:
+                    st.metric("Late Night Total", int(numeric_rows['Late Night'].sum()))
+                
     except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
-        st.info("Please make sure you've uploaded a properly formatted CSV file.")
+        st.error(f"Error processing file: {str(e)}")
 else:
-    st.info("👆 Please upload a CSV file to get started.")
+    st.info("Please upload a CSV file to begin processing.")
 
-# Add footer
-st.markdown("---")
-st.markdown("### 💡 Instructions")
-st.markdown("""
-1. Upload a CSV file with the expected format
-2. The application will process your data
-3. Preview the processed report
-4. Download the final Excel file with highlighted totals
-
-**Color Coding in Excel:**
-- 🔵 Light Blue: Subcategory Total
-- 🟡 Yellow: Order Type Total (Dine-In Total, Take-Away Total, Delivery Total)
-- 🟠 Orange: Grand Total
-""")
+# Instructions
+with st.expander("Instructions"):
+    st.write("""
+    1. Upload your CSV file (should be in the same format as Bill-wise Item Sales export)
+    2. Click 'Process Data' to analyze the sales
+    3. View the processed results in the table
+    4. Download the processed data as Excel or CSV file
+    5. Summary statistics are shown at the bottom
+    
+    **Note:** The file should have columns: Item Name, Order Type, Quantity, Captain Name, Billed Time
+    """)
