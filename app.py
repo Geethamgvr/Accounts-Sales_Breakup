@@ -7,40 +7,29 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 
 st.set_page_config(page_title="Bill-wise Item Sales", layout="wide")
 
-# Custom CSS for colors and auto-fit
+# Custom CSS for colors
 st.markdown("""
 <style>
-    /* Captain name rows - light blue background */
-    .captain-row {
-        background-color: #e6f3ff !important;
-        font-weight: 500 !important;
-    }
     /* Grand total row - light green background */
     .grandtotal-row {
         background-color: #d4edda !important;
         font-weight: bold !important;
     }
     /* Item rows - distinct colors per captain */
-    .captain-color-0 {
+    .captain-0 {
         background-color: #e6ffe6 !important;  /* Light green */
     }
-    .captain-color-1 {
+    .captain-1 {
         background-color: #e6f0ff !important;  /* Light blue */
     }
-    .captain-color-2 {
+    .captain-2 {
         background-color: #fff2e6 !important;  /* Light orange */
     }
-    .captain-color-3 {
+    .captain-3 {
         background-color: #ffe6f0 !important;  /* Light pink */
     }
-    .captain-color-4 {
+    .captain-4 {
         background-color: #f0e6ff !important;  /* Light purple */
-    }
-    /* Auto-fit columns */
-    .dataframe-container {
-        font-size: 14px;
-        width: 100%;
-        overflow-x: auto;
     }
     /* Summary section styling */
     .item-card {
@@ -135,26 +124,24 @@ if uploaded_file is not None:
             # Track item-wise totals
             item_totals = {}
             
-            # Create a list to store all rows
-            all_rows = []
+            # Create a list to store all rows for display
+            display_rows = []
             
             # Process each captain
-            for captain_idx, captain in enumerate(unique_captains):
+            for captain in unique_captains:
                 captain_data = file[file['Captain Name'] == captain]
                 captain_items = sorted(captain_data['Item Name'].unique())
                 color_index = captain_to_color[captain]
                 
-                # Add captain header row
-                all_rows.append({
+                # Add captain name row (no color)
+                display_rows.append({
                     'Captain Name': captain,
                     'Item Name': '',
                     'Breakfast': '',
                     'Lunch': '',
                     'Snacks': '',
                     'Late Night': '',
-                    'Total': '',
-                    'row_type': 'captain_header',
-                    'color_index': color_index  # Store color index for this captain
+                    'Total': ''
                 })
                 
                 # Process each item for this captain
@@ -187,8 +174,8 @@ if uploaded_file is not None:
                         item_totals[item] = 0
                     item_totals[item] += total
                     
-                    # Add item row with same color index as its captain
-                    all_rows.append({
+                    # Add item row with color based on captain
+                    display_rows.append({
                         'Captain Name': '',
                         'Item Name': item,
                         'Breakfast': breakfast if breakfast > 0 else '',
@@ -196,12 +183,11 @@ if uploaded_file is not None:
                         'Snacks': snacks if snacks > 0 else '',
                         'Late Night': late_night if late_night > 0 else '',
                         'Total': total,
-                        'row_type': 'item',
-                        'color_index': color_index  # Same color as captain
+                        'color_class': f'captain-{color_index}'  # Add color class for styling
                     })
             
             # Add grand total row
-            all_rows.append({
+            display_rows.append({
                 'Captain Name': 'GRAND TOTAL',
                 'Item Name': '--- ALL ITEMS TOTAL ---',
                 'Breakfast': grand_total_breakfast if grand_total_breakfast > 0 else '',
@@ -209,50 +195,42 @@ if uploaded_file is not None:
                 'Snacks': grand_total_snacks if grand_total_snacks > 0 else '',
                 'Late Night': grand_total_latenight if grand_total_latenight > 0 else '',
                 'Total': grand_total_all,
-                'row_type': 'grand_total',
-                'color_index': -1
+                'color_class': 'grandtotal-row'
             })
             
             # Create dataframe
-            df_display = pd.DataFrame(all_rows)
+            df_display = pd.DataFrame(display_rows)
             
-            # Display results with colors
+            # Display results
             st.subheader("📋 Processed Results")
             
-            # Define color mapping function
+            # Apply CSS classes for coloring
             def color_rows(row):
-                styles = []
-                color_map = {
-                    0: 'background-color: #e6ffe6',  # Light green
-                    1: 'background-color: #e6f0ff',  # Light blue
-                    2: 'background-color: #fff2e6',  # Light orange
-                    3: 'background-color: #ffe6f0',  # Light pink
-                    4: 'background-color: #f0e6ff',  # Light purple
-                }
-                
-                for col in row.index:
-                    if row['row_type'] == 'grand_total':
-                        styles.append('background-color: #d4edda; font-weight: bold')
-                    elif row['row_type'] == 'captain_header':
-                        styles.append('background-color: #e6f3ff; font-weight: 500')
-                    elif row['row_type'] == 'item':
-                        # Use the stored color_index
-                        color = color_map.get(row['color_index'], 'background-color: #f5f5f5')
-                        styles.append(color)
-                    else:
-                        styles.append('')
-                return styles
+                if 'color_class' in row and row['color_class'] == 'grandtotal-row':
+                    return ['background-color: #d4edda; font-weight: bold'] * len(row)
+                elif 'color_class' in row and row['color_class']:
+                    # This is an item row with captain color
+                    color_map = {
+                        'captain-0': 'background-color: #e6ffe6',
+                        'captain-1': 'background-color: #e6f0ff',
+                        'captain-2': 'background-color: #fff2e6',
+                        'captain-3': 'background-color: #ffe6f0',
+                        'captain-4': 'background-color: #f0e6ff',
+                    }
+                    color = color_map.get(row['color_class'], '')
+                    return [color] * len(row)
+                else:
+                    # Captain name row - no color
+                    return [''] * len(row)
             
-            # Apply styling
-            styled_df = df_display.style.apply(color_rows, axis=1)
+            # Apply styling to the dataframe
+            if 'color_class' in df_display.columns:
+                styled_df = df_display.drop('color_class', axis=1).style.apply(color_rows, axis=1)
+            else:
+                styled_df = df_display.style
             
-            # Display the styled dataframe
-            st.dataframe(
-                styled_df[['Captain Name', 'Item Name', 'Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total']],
-                use_container_width=True,
-                height=500,
-                hide_index=True
-            )
+            # Display the dataframe
+            st.dataframe(styled_df, use_container_width=True, height=500)
             
             # Item-wise summary
             st.subheader("📦 Item-wise Total Quantity")
@@ -290,7 +268,7 @@ if uploaded_file is not None:
             col1, col2 = st.columns(2)
             
             with col1:
-                # Create formatted Excel file
+                # Create Excel file
                 output = BytesIO()
                 
                 # Create a workbook
@@ -298,15 +276,14 @@ if uploaded_file is not None:
                 ws = wb.active
                 ws.title = "Sales Data"
                 
-                # Define colors
+                # Define colors for Excel
                 colors = {
-                    'captain_header': PatternFill(start_color='E6F3FF', end_color='E6F3FF', fill_type='solid'),
                     'grand_total': PatternFill(start_color='D4EDDA', end_color='D4EDDA', fill_type='solid'),
-                    0: PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),  # Light green
-                    1: PatternFill(start_color='E6F0FF', end_color='E6F0FF', fill_type='solid'),  # Light blue
-                    2: PatternFill(start_color='FFF2E6', end_color='FFF2E6', fill_type='solid'),  # Light orange
-                    3: PatternFill(start_color='FFE6F0', end_color='FFE6F0', fill_type='solid'),  # Light pink
-                    4: PatternFill(start_color='F0E6FF', end_color='F0E6FF', fill_type='solid'),  # Light purple
+                    0: PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),
+                    1: PatternFill(start_color='E6F0FF', end_color='E6F0FF', fill_type='solid'),
+                    2: PatternFill(start_color='FFF2E6', end_color='FFF2E6', fill_type='solid'),
+                    3: PatternFill(start_color='FFE6F0', end_color='FFE6F0', fill_type='solid'),
+                    4: PatternFill(start_color='F0E6FF', end_color='F0E6FF', fill_type='solid'),
                 }
                 
                 # Add headers
@@ -324,23 +301,29 @@ if uploaded_file is not None:
                     )
                 
                 # Add data with colors
-                for row_num, row_data in enumerate(all_rows, 2):
-                    # Determine row color
-                    if row_data['row_type'] == 'grand_total':
-                        row_color = colors['grand_total']
-                        font = Font(bold=True)
-                    elif row_data['row_type'] == 'captain_header':
-                        row_color = colors['captain_header']
-                        font = Font(bold=True)
-                    else:  # item row
-                        color_index = row_data['color_index']
-                        row_color = colors.get(color_index, colors[0])
+                for row_num, row_data in enumerate(display_rows, 2):
+                    # Determine row color (only for items and grand total)
+                    if 'color_class' in row_data:
+                        if row_data['color_class'] == 'grandtotal-row':
+                            row_color = colors['grand_total']
+                            font = Font(bold=True)
+                        elif row_data['color_class'].startswith('captain-'):
+                            color_index = int(row_data['color_class'].split('-')[1])
+                            row_color = colors.get(color_index, colors[0])
+                            font = Font(bold=False)
+                        else:
+                            row_color = None
+                            font = Font(bold=False)
+                    else:
+                        # Captain name row - no color
+                        row_color = None
                         font = Font(bold=False)
                     
                     for col_num, col_name in enumerate(headers, 1):
                         cell = ws.cell(row=row_num, column=col_num)
                         cell.value = row_data[col_name]
-                        cell.fill = row_color
+                        if row_color:
+                            cell.fill = row_color
                         cell.font = font
                         cell.alignment = Alignment(horizontal='center' if col_name in ['Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total'] else 'left')
                         cell.border = Border(
@@ -374,10 +357,10 @@ if uploaded_file is not None:
                 )
             
             with col2:
-                # Prepare CSV data
+                # Prepare CSV data (remove color_class)
                 csv_df = pd.DataFrame([
-                    {k: v for k, v in row.items() if k not in ['row_type', 'color_index']}
-                    for row in all_rows
+                    {k: v for k, v in row.items() if k != 'color_class'}
+                    for row in display_rows
                 ])
                 csv_data = csv_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
