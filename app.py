@@ -43,7 +43,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Bill-wise Item Sales Processor")
+st.title("📊 Captain wise Sales")
 st.write("Upload your CSV file to generate the report")
 
 # File upload
