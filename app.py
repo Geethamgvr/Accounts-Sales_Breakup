@@ -36,15 +36,6 @@ st.markdown("""
     .captain-4 {
         background-color: #f0e6ff !important;  /* Light purple */
     }
-    .captain-5 {
-        background-color: #fff0e0 !important;  /* Light peach */
-    }
-    .captain-6 {
-        background-color: #e0f0ff !important;  /* Light sky blue */
-    }
-    .captain-7 {
-        background-color: #e6ffe6 !important;  /* Light mint */
-    }
     /* Auto-fit columns */
     .dataframe-container {
         font-size: 14px;
@@ -139,7 +130,7 @@ if uploaded_file is not None:
             # Track item-wise totals
             item_totals = {}
             
-            # Create a list to store all rows with their captain info
+            # Create a list to store all rows
             all_rows = []
             
             # Process each captain
@@ -150,7 +141,7 @@ if uploaded_file is not None:
                 # Add captain header row
                 all_rows.append({
                     'Captain Name': captain,
-                    'Item Name': '',  # Empty for captain header
+                    'Item Name': '',
                     'Breakfast': '',
                     'Lunch': '',
                     'Snacks': '',
@@ -192,7 +183,7 @@ if uploaded_file is not None:
                     
                     # Add item row
                     all_rows.append({
-                        'Captain Name': '',  # Empty for item rows
+                        'Captain Name': '',
                         'Item Name': item,
                         'Breakfast': breakfast if breakfast > 0 else '',
                         'Lunch': lunch if lunch > 0 else '',
@@ -216,47 +207,62 @@ if uploaded_file is not None:
                 'captain_index': -1
             })
             
-            # Create dataframe for display
-            display_df = pd.DataFrame(all_rows)
+            # Create dataframe
+            df_display = pd.DataFrame(all_rows)
             
             # Display results with colors
             st.subheader("📋 Processed Results")
             
             # Define color mapping function
             def color_rows(row):
-                if row['row_type'] == 'grand_total':
-                    return ['background-color: #d4edda; font-weight: bold'] * len(row)
-                elif row['row_type'] == 'captain_header':
-                    return ['background-color: #e6f3ff; font-weight: 500'] * len(row)
-                elif row['row_type'] == 'item':
-                    # Color based on captain index
-                    color_map = {
-                        0: 'background-color: #e6ffe6',
-                        1: 'background-color: #e6f0ff',
-                        2: 'background-color: #fff2e6',
-                        3: 'background-color: #ffe6f0',
-                        4: 'background-color: #f0e6ff',
-                        5: 'background-color: #fff0e0',
-                        6: 'background-color: #e0f0ff',
-                        7: 'background-color: #e6ffe6',
-                    }
-                    color = color_map.get(row['captain_index'] % 8, 'background-color: #f5f5f5')
-                    return [color] * len(row)
-                return [''] * len(row)
+                styles = []
+                for col in row.index:
+                    if row['row_type'] == 'grand_total':
+                        styles.append('background-color: #d4edda; font-weight: bold')
+                    elif row['row_type'] == 'captain_header':
+                        styles.append('background-color: #e6f3ff; font-weight: 500')
+                    elif row['row_type'] == 'item':
+                        # Color based on captain index
+                        color_map = {
+                            0: 'background-color: #e6ffe6',
+                            1: 'background-color: #e6f0ff',
+                            2: 'background-color: #fff2e6',
+                            3: 'background-color: #ffe6f0',
+                            4: 'background-color: #f0e6ff',
+                        }
+                        color = color_map.get(row['captain_index'] % 5, 'background-color: #f5f5f5')
+                        styles.append(color)
+                    else:
+                        styles.append('')
+                return styles
             
-            # Apply styling to the dataframe
-            styled_df = display_df.style.apply(color_rows, axis=1)
+            # Apply styling and select columns for display
+            styled_df = df_display.style.apply(color_rows, axis=1)
             
-            # Display only the relevant columns
-            st.dataframe(styled_df[['Captain Name', 'Item Name', 'Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total']], 
-                        use_container_width=True, height=500)
+            # Display the styled dataframe with only the columns we want
+            st.dataframe(
+                styled_df.format(precision=0),
+                column_config={
+                    "Captain Name": "Captain Name",
+                    "Item Name": "Item Name",
+                    "Breakfast": "Breakfast",
+                    "Lunch": "Lunch",
+                    "Snacks": "Snacks",
+                    "Late Night": "Late Night",
+                    "Total": "Total"
+                },
+                use_container_width=True,
+                height=500,
+                hide_index=True
+            )
             
             # Item-wise summary
             st.subheader("📦 Item-wise Total Quantity")
             
-            # Create item summary in a grid
+            # Display items in multiple columns
             cols = st.columns(3)
-            for idx, (item, qty) in enumerate(sorted(item_totals.items(), key=lambda x: x[1], reverse=True)):
+            items_list = sorted(item_totals.items(), key=lambda x: x[1], reverse=True)
+            for idx, (item, qty) in enumerate(items_list):
                 col_idx = idx % 3
                 with cols[col_idx]:
                     st.markdown(f"""
@@ -281,7 +287,7 @@ if uploaded_file is not None:
             with col5:
                 st.metric("Late Night", grand_total_latenight)
             
-            # Download buttons with Excel formatting
+            # Download buttons
             st.subheader("💾 Download")
             col1, col2 = st.columns(2)
             
@@ -289,7 +295,7 @@ if uploaded_file is not None:
                 # Create formatted Excel file
                 output = BytesIO()
                 
-                # Create a workbook and add a worksheet
+                # Create a workbook
                 wb = Workbook()
                 ws = wb.active
                 ws.title = "Sales Data"
@@ -298,14 +304,11 @@ if uploaded_file is not None:
                 colors = {
                     'captain_header': PatternFill(start_color='E6F3FF', end_color='E6F3FF', fill_type='solid'),
                     'grand_total': PatternFill(start_color='D4EDDA', end_color='D4EDDA', fill_type='solid'),
-                    0: PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),  # Light green
-                    1: PatternFill(start_color='E6F0FF', end_color='E6F0FF', fill_type='solid'),  # Light blue
-                    2: PatternFill(start_color='FFF2E6', end_color='FFF2E6', fill_type='solid'),  # Light orange
-                    3: PatternFill(start_color='FFE6F0', end_color='FFE6F0', fill_type='solid'),  # Light pink
-                    4: PatternFill(start_color='F0E6FF', end_color='F0E6FF', fill_type='solid'),  # Light purple
-                    5: PatternFill(start_color='FFF0E0', end_color='FFF0E0', fill_type='solid'),  # Light peach
-                    6: PatternFill(start_color='E0F0FF', end_color='E0F0FF', fill_type='solid'),  # Light sky blue
-                    7: PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),  # Light mint
+                    0: PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),
+                    1: PatternFill(start_color='E6F0FF', end_color='E6F0FF', fill_type='solid'),
+                    2: PatternFill(start_color='FFF2E6', end_color='FFF2E6', fill_type='solid'),
+                    3: PatternFill(start_color='FFE6F0', end_color='FFE6F0', fill_type='solid'),
+                    4: PatternFill(start_color='F0E6FF', end_color='F0E6FF', fill_type='solid'),
                 }
                 
                 # Add headers
@@ -331,8 +334,8 @@ if uploaded_file is not None:
                     elif row_data['row_type'] == 'captain_header':
                         row_color = colors['captain_header']
                         font = Font(bold=True)
-                    else:  # item row
-                        color_index = row_data['captain_index'] % 8
+                    else:
+                        color_index = row_data['captain_index'] % 5
                         row_color = colors.get(color_index, colors[0])
                         font = Font(bold=False)
                     
@@ -341,13 +344,7 @@ if uploaded_file is not None:
                         cell.value = row_data[col_name]
                         cell.fill = row_color
                         cell.font = font
-                        
-                        # Set alignment
-                        if col_name in ['Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total']:
-                            cell.alignment = Alignment(horizontal='center')
-                        else:
-                            cell.alignment = Alignment(horizontal='left')
-                        
+                        cell.alignment = Alignment(horizontal='center' if col_name in ['Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total'] else 'left')
                         cell.border = Border(
                             left=Side(style='thin'), 
                             right=Side(style='thin'),
@@ -368,7 +365,6 @@ if uploaded_file is not None:
                     adjusted_width = min(max_length + 2, 30)
                     ws.column_dimensions[column_letter].width = adjusted_width
                 
-                # Save to BytesIO
                 wb.save(output)
                 
                 st.download_button(
@@ -380,8 +376,11 @@ if uploaded_file is not None:
                 )
             
             with col2:
-                # For CSV, we need to remove empty strings and show blanks
-                csv_df = display_df[['Captain Name', 'Item Name', 'Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total']].copy()
+                # Prepare CSV data (without metadata columns)
+                csv_df = pd.DataFrame([
+                    {k: v for k, v in row.items() if k not in ['row_type', 'captain_index']}
+                    for row in all_rows
+                ])
                 csv_data = csv_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="📥 Download CSV",
