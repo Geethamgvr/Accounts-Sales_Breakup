@@ -5,28 +5,55 @@ from io import BytesIO
 
 st.set_page_config(page_title="Bill-wise Item Sales", layout="wide")
 
-# Custom CSS for colors
+# Custom CSS for colors and auto-fit
 st.markdown("""
 <style>
     /* Captain name rows - light blue background */
     .captain-row {
         background-color: #e6f3ff !important;
+        font-weight: 500 !important;
     }
     /* Grand total row - light green background */
     .grandtotal-row {
         background-color: #d4edda !important;
         font-weight: bold !important;
     }
-    /* Item rows - alternating subtle gray */
-    .item-row-even {
-        background-color: #f9f9f9 !important;
+    /* Item rows - alternating subtle colors per captain */
+    .captain-1-items {
+        background-color: #fff2e6 !important;  /* Light orange for captain 1 items */
     }
-    .item-row-odd {
-        background-color: #ffffff !important;
+    .captain-2-items {
+        background-color: #e6f0ff !important;  /* Light blue for captain 2 items */
     }
-    /* Style the dataframe container */
+    .captain-3-items {
+        background-color: #e6ffe6 !important;  /* Light green for captain 3 items */
+    }
+    .captain-4-items {
+        background-color: #ffe6f0 !important;  /* Light pink for captain 4 items */
+    }
+    .captain-5-items {
+        background-color: #f0e6ff !important;  /* Light purple for captain 5 items */
+    }
+    /* Auto-fit columns */
     .dataframe-container {
         font-size: 14px;
+        width: 100%;
+        overflow-x: auto;
+    }
+    /* Summary section styling */
+    .item-summary {
+        background-color: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 10px 0;
+    }
+    .item-card {
+        background-color: white;
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        margin: 5px;
+        text-align: center;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -105,8 +132,13 @@ if uploaded_file is not None:
             grand_total_latenight = 0
             grand_total_all = 0
             
-            # Track row index for alternating colors
-            row_counter = 0
+            # Track item-wise totals
+            item_totals = {}
+            
+            # Captain color mapping
+            captain_colors = {}
+            for i, captain in enumerate(unique_captains):
+                captain_colors[captain] = f'captain-{(i % 5) + 1}-items'
             
             for captain in unique_captains:
                 captain_data = file[file['Captain Name'] == captain]
@@ -146,12 +178,10 @@ if uploaded_file is not None:
                     grand_total_latenight += late_night
                     grand_total_all += total
                     
-                    # Add styling class based on row type
-                    if captain_display:  # This is a captain name row
-                        row_class = 'captain-row'
-                    else:  # Regular item row
-                        row_class = f'item-row-{"even" if row_counter % 2 == 0 else "odd"}'
-                        row_counter += 1
+                    # Add to item-wise totals
+                    if item not in item_totals:
+                        item_totals[item] = 0
+                    item_totals[item] += total
                     
                     row = {
                         'Captain Name': captain_display,
@@ -160,8 +190,7 @@ if uploaded_file is not None:
                         'Lunch': lunch,
                         'Snacks': snacks,
                         'Late Night': late_night,
-                        'Total': total,
-                        '_class': row_class  # Hidden column for styling
+                        'Total': total
                     }
                     all_results.append(row)
             
@@ -173,76 +202,113 @@ if uploaded_file is not None:
                 'Lunch': grand_total_lunch,
                 'Snacks': grand_total_snacks,
                 'Late Night': grand_total_latenight,
-                'Total': grand_total_all,
-                '_class': 'grandtotal-row'
+                'Total': grand_total_all
             }
             all_results.append(grand_total_row)
             
             # Final dataframe
             final_result = pd.DataFrame(all_results)
             
-            # Display results with colors
-            st.subheader("Processed Results")
+            # Display results with colors and auto-fit
+            st.subheader("📋 Processed Results")
             
-            # Apply styling using a function
+            # Create color mapping function
             def color_rows(row):
-                if row.get('_class') == 'captain-row':
-                    return ['background-color: #e6f3ff'] * len(row)
-                elif row.get('_class') == 'grandtotal-row':
+                if row['Captain Name'] == 'GRAND TOTAL':
                     return ['background-color: #d4edda; font-weight: bold'] * len(row)
-                elif row.get('_class') == 'item-row-even':
-                    return ['background-color: #f9f9f9'] * len(row)
-                elif row.get('_class') == 'item-row-odd':
-                    return ['background-color: #ffffff'] * len(row)
+                elif row['Captain Name'] != '' and row['Captain Name'] != 'GRAND TOTAL':
+                    # This is a captain header row
+                    return ['background-color: #e6f3ff; font-weight: 500'] * len(row)
+                else:
+                    # This is an item row - find which captain it belongs to
+                    # Find the captain for this item by looking at previous rows
+                    for i in range(len(all_results)):
+                        if all_results[i]['Item Name'] == row['Item Name']:
+                            # Find the captain for this item
+                            for j in range(i-1, -1, -1):
+                                if all_results[j]['Captain Name'] not in ['', 'GRAND TOTAL']:
+                                    captain = all_results[j]['Captain Name']
+                                    color_class = captain_colors.get(captain, '')
+                                    if color_class == 'captain-1-items':
+                                        return ['background-color: #fff2e6'] * len(row)
+                                    elif color_class == 'captain-2-items':
+                                        return ['background-color: #e6f0ff'] * len(row)
+                                    elif color_class == 'captain-3-items':
+                                        return ['background-color: #e6ffe6'] * len(row)
+                                    elif color_class == 'captain-4-items':
+                                        return ['background-color: #ffe6f0'] * len(row)
+                                    elif color_class == 'captain-5-items':
+                                        return ['background-color: #f0e6ff'] * len(row)
+                                    break
                 return [''] * len(row)
             
-            # Drop the _class column for display
-            display_df = final_result.drop('_class', axis=1)
-            
             # Apply styling
-            styled_df = display_df.style.apply(color_rows, axis=1)
+            styled_df = final_result.style.apply(color_rows, axis=1)
             
-            # Display the styled dataframe
-            st.dataframe(styled_df, use_container_width=True)
+            # Display with auto-fit columns
+            st.dataframe(styled_df, use_container_width=True, height=500)
             
-            # Summary
-            st.subheader("Summary")
+            # Item-wise summary
+            st.subheader("📦 Item-wise Total Quantity")
+            
+            # Create item summary in a grid
+            item_summary_df = pd.DataFrame([
+                {'Item': item, 'Total Quantity': qty} 
+                for item, qty in sorted(item_totals.items(), key=lambda x: x[1], reverse=True)
+            ])
+            
+            # Display items in multiple columns
+            cols = st.columns(3)
+            for idx, row in item_summary_df.iterrows():
+                col_idx = idx % 3
+                with cols[col_idx]:
+                    st.markdown(f"""
+                    <div class="item-card">
+                        <strong>{row['Item']}</strong><br>
+                        <span style="font-size: 24px; color: #FF4B4B;">{row['Total Quantity']}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Time-wise summary
+            st.subheader("⏰ Time-wise Summary")
             col1, col2, col3, col4, col5 = st.columns(5)
             
             with col1:
-                st.metric("Total Items", grand_total_all)
+                st.metric("Total Items", grand_total_all, delta=None)
             with col2:
-                st.metric("Breakfast", grand_total_breakfast)
+                st.metric("Breakfast", grand_total_breakfast, delta=None)
             with col3:
-                st.metric("Lunch", grand_total_lunch)
+                st.metric("Lunch", grand_total_lunch, delta=None)
             with col4:
-                st.metric("Snacks", grand_total_snacks)
+                st.metric("Snacks", grand_total_snacks, delta=None)
             with col5:
-                st.metric("Late Night", grand_total_latenight)
+                st.metric("Late Night", grand_total_latenight, delta=None)
             
-            # Download buttons (without the hidden column)
-            st.subheader("Download")
+            # Download buttons
+            st.subheader("💾 Download")
             col1, col2 = st.columns(2)
             
             with col1:
                 output = BytesIO()
                 with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    display_df.to_excel(writer, index=False, sheet_name='Sales Data')
+                    final_result.to_excel(writer, index=False, sheet_name='Sales Data')
                 
                 st.download_button(
-                    label="Download Excel",
+                    label="📥 Download Excel",
                     data=output.getvalue(),
                     file_name="processed_sales_data.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
                 )
             
             with col2:
-                csv_data = display_df.to_csv(index=False).encode('utf-8')
+                csv_data = final_result.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    label="Download CSV",
+                    label="📥 Download CSV",
                     data=csv_data,
                     file_name="processed_sales_data.csv",
-                    mime="text/csv"
+                    mime="text/csv",
+                    use_container_width=True
                 )
                     
     except Exception as e:
