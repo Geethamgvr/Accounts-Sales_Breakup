@@ -5,7 +5,7 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 
-st.set_page_config(page_title="Bill-wise Item Sales", layout="wide")
+st.set_page_config(page_title="Captain wise Sales", layout="wide")
 
 # Custom CSS for colors
 st.markdown("""
