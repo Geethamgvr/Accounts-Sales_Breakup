@@ -96,13 +96,14 @@ if uploaded_file is not None:
                     else:
                         captain_display = ''
                     
+                    # Convert to int to remove decimal places
                     row = {
                         'Captain Name': captain_display,
                         'Item Name': item,
-                        'Breakfast': pivot.get('Breakfast', 0),
-                        'Lunch': pivot.get('Lunch', 0),
-                        'Snacks': pivot.get('Snacks', 0),
-                        'Late Night': pivot.get('Late Night', 0)
+                        'Breakfast': int(pivot.get('Breakfast', 0)),
+                        'Lunch': int(pivot.get('Lunch', 0)),
+                        'Snacks': int(pivot.get('Snacks', 0)),
+                        'Late Night': int(pivot.get('Late Night', 0))
                     }
                     row['Total'] = (row['Breakfast'] + row['Lunch'] + 
                                   row['Snacks'] + row['Late Night'])
@@ -113,10 +114,10 @@ if uploaded_file is not None:
                 total_row = {
                     'Captain Name': '',
                     'Item Name': '--- CAPTAIN TOTAL ---',
-                    'Breakfast': captain_total.get('Breakfast', 0),
-                    'Lunch': captain_total.get('Lunch', 0),
-                    'Snacks': captain_total.get('Snacks', 0),
-                    'Late Night': captain_total.get('Late Night', 0)
+                    'Breakfast': int(captain_total.get('Breakfast', 0)),
+                    'Lunch': int(captain_total.get('Lunch', 0)),
+                    'Snacks': int(captain_total.get('Snacks', 0)),
+                    'Late Night': int(captain_total.get('Late Night', 0))
                 }
                 total_row['Total'] = (total_row['Breakfast'] + total_row['Lunch'] + 
                                     total_row['Snacks'] + total_row['Late Night'])
@@ -132,16 +133,24 @@ if uploaded_file is not None:
             # Summary
             st.subheader("Summary")
             col1, col2, col3, col4, col5 = st.columns(5)
+            
+            # Calculate totals with int conversion
+            items_total = int(final_result[final_result['Item Name'] != '--- CAPTAIN TOTAL ---']['Total'].sum())
+            breakfast_total = int(final_result['Breakfast'].sum())
+            lunch_total = int(final_result['Lunch'].sum())
+            snacks_total = int(final_result['Snacks'].sum())
+            latenight_total = int(final_result['Late Night'].sum())
+            
             with col1:
-                st.metric("Total Items", int(final_result[final_result['Item Name'] != '--- CAPTAIN TOTAL ---']['Total'].sum()))
+                st.metric("Total Items", items_total)
             with col2:
-                st.metric("Breakfast", int(final_result['Breakfast'].sum()))
+                st.metric("Breakfast", breakfast_total)
             with col3:
-                st.metric("Lunch", int(final_result['Lunch'].sum()))
+                st.metric("Lunch", lunch_total)
             with col4:
-                st.metric("Snacks", int(final_result['Snacks'].sum()))
+                st.metric("Snacks", snacks_total)
             with col5:
-                st.metric("Late Night", int(final_result['Late Night'].sum()))
+                st.metric("Late Night", latenight_total)
             
             # Download buttons
             st.subheader("Download")
