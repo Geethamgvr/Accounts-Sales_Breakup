@@ -216,50 +216,36 @@ if uploaded_file is not None:
                 'captain_index': -1
             })
             
-            # Create dataframe for display (without metadata columns)
-            display_rows = []
-            for row in all_rows:
-                display_rows.append({
-                    'Captain Name': row['Captain Name'],
-                    'Item Name': row['Item Name'],
-                    'Breakfast': row['Breakfast'],
-                    'Lunch': row['Lunch'],
-                    'Snacks': row['Snacks'],
-                    'Late Night': row['Late Night'],
-                    'Total': row['Total']
-                })
-            
-            final_result = pd.DataFrame(display_rows)
+            # Create dataframe for display
+            display_df = pd.DataFrame(all_rows)
             
             # Display results with colors
             st.subheader("📋 Processed Results")
             
-            # Create a DataFrame with all data including metadata for styling
-            styling_df = pd.DataFrame(all_rows)
-            
             # Define color mapping function
-            def get_row_color(row):
+            def color_rows(row):
                 if row['row_type'] == 'grand_total':
-                    return 'background-color: #d4edda; font-weight: bold'
+                    return ['background-color: #d4edda; font-weight: bold'] * len(row)
                 elif row['row_type'] == 'captain_header':
-                    return 'background-color: #e6f3ff; font-weight: 500'
+                    return ['background-color: #e6f3ff; font-weight: 500'] * len(row)
                 elif row['row_type'] == 'item':
                     # Color based on captain index
                     color_map = {
-                        0: 'background-color: #e6ffe6',  # Light green
-                        1: 'background-color: #e6f0ff',  # Light blue
-                        2: 'background-color: #fff2e6',  # Light orange
-                        3: 'background-color: #ffe6f0',  # Light pink
-                        4: 'background-color: #f0e6ff',  # Light purple
-                        5: 'background-color: #fff0e0',  # Light peach
-                        6: 'background-color: #e0f0ff',  # Light sky blue
-                        7: 'background-color: #e6ffe6',  # Light mint
+                        0: 'background-color: #e6ffe6',
+                        1: 'background-color: #e6f0ff',
+                        2: 'background-color: #fff2e6',
+                        3: 'background-color: #ffe6f0',
+                        4: 'background-color: #f0e6ff',
+                        5: 'background-color: #fff0e0',
+                        6: 'background-color: #e0f0ff',
+                        7: 'background-color: #e6ffe6',
                     }
-                    return color_map.get(row['captain_index'] % 8, 'background-color: #f5f5f5')
-                return ''
+                    color = color_map.get(row['captain_index'] % 8, 'background-color: #f5f5f5')
+                    return [color] * len(row)
+                return [''] * len(row)
             
-            # Apply styling
-            styled_df = styling_df.style.apply(lambda row: [get_row_color(row)] * len(row), axis=1)
+            # Apply styling to the dataframe
+            styled_df = display_df.style.apply(color_rows, axis=1)
             
             # Display only the relevant columns
             st.dataframe(styled_df[['Captain Name', 'Item Name', 'Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total']], 
@@ -269,20 +255,14 @@ if uploaded_file is not None:
             st.subheader("📦 Item-wise Total Quantity")
             
             # Create item summary in a grid
-            item_summary_df = pd.DataFrame([
-                {'Item': item, 'Total Quantity': qty} 
-                for item, qty in sorted(item_totals.items(), key=lambda x: x[1], reverse=True)
-            ])
-            
-            # Display items in multiple columns
             cols = st.columns(3)
-            for idx, row in item_summary_df.iterrows():
+            for idx, (item, qty) in enumerate(sorted(item_totals.items(), key=lambda x: x[1], reverse=True)):
                 col_idx = idx % 3
                 with cols[col_idx]:
                     st.markdown(f"""
                     <div class="item-card">
-                        <strong>{row['Item']}</strong><br>
-                        <span style="font-size: 24px; color: #FF4B4B;">{row['Total Quantity']}</span>
+                        <strong>{item}</strong><br>
+                        <span style="font-size: 24px; color: #FF4B4B;">{qty}</span>
                     </div>
                     """, unsafe_allow_html=True)
             
@@ -400,7 +380,9 @@ if uploaded_file is not None:
                 )
             
             with col2:
-                csv_data = final_result.to_csv(index=False).encode('utf-8')
+                # For CSV, we need to remove empty strings and show blanks
+                csv_df = display_df[['Captain Name', 'Item Name', 'Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total']].copy()
+                csv_data = csv_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="📥 Download CSV",
                     data=csv_data,
