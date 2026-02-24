@@ -82,7 +82,7 @@ if uploaded_file is not None:
             # Group items
             def Grouped_items(ItemName):
                 item_name = str(ItemName).lower()
-                if "tamilnadu meals" in item_name:
+                if "tamil nadu meals" in item_name:
                     return "Tamilnadu Meals"
                 elif 'curd rice' in item_name:
                     return "Classic Curd Rice"
