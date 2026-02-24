@@ -90,7 +90,7 @@ if uploaded_file is not None:
                     return "North Indian Thali"
                 elif "special soup" in item_name:
                     return "Day Spl Soup"
-                elif "tandoori" in item_name:
+                elif "tandoori platter" in item_name:
                     return "Tandoori Platter"
                 elif "kunafa" in item_name:
                     return 'Kunafa_item'
