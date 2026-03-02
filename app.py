@@ -72,7 +72,7 @@ if uploaded_file is not None:
                     return 'Breakfast'
                 elif time(11, 1) <= t <= time(16, 0):
                     return 'Lunch'
-                elif time(16, 1) <= t <= time(19, 0):
+                elif time(16, 1) <= t <= time(18, 9):
                     return 'Snacks'
                 else:
                     return 'Late Night'
