@@ -62,22 +62,36 @@ if uploaded_file is not None:
             file = file2[['Item Name', 'Order Type', 'Quantity', 'Captain Name','Billed Time']]
             file = file[file['Captain Name'].str.lower() != 'without_captain'].copy()
             
-            # Convert Billed Time
-            file['Billed Time'] = pd.to_datetime(file['Billed Time'])
+            # Convert Billed Time with error handling
+            file['Billed Time'] = pd.to_datetime(file['Billed Time'], errors='coerce')
             
-            # Time categorization
+            # Drop rows with invalid Billed Time
+            original_len = len(file)
+            file = file.dropna(subset=['Billed Time'])
+            if len(file) < original_len:
+                st.warning(f"Dropped {original_len - len(file)} rows with invalid Billed Time values")
+            
+            # Time categorization with null check
             def get_time_category(billed_time):
-                t = billed_time.time()
-                if time(6, 00) <= t < time(11, 00):
-                    return 'Breakfast'
-                elif time(11, 00) <= t < time(16, 00):
-                    return 'Lunch'
-                elif time(16, 00) <= t < time(18, 00):
-                    return 'Snacks'
-                else:
-                    return 'Late Night'
+                if pd.isna(billed_time):
+                    return 'Unknown'
+                try:
+                    t = billed_time.time()
+                    if time(6, 00) <= t < time(11, 00):
+                        return 'Breakfast'
+                    elif time(11, 00) <= t < time(16, 00):
+                        return 'Lunch'
+                    elif time(16, 00) <= t < time(18, 00):
+                        return 'Snacks'
+                    else:
+                        return 'Late Night'
+                except (AttributeError, TypeError):
+                    return 'Unknown'
             
             file['Time Category'] = file['Billed Time'].apply(get_time_category)
+            
+            # Filter out unknown time categories if needed
+            file = file[file['Time Category'] != 'Unknown'].copy()
             
             # Group items
             def Grouped_items(ItemName):
