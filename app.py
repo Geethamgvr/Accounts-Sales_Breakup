@@ -68,11 +68,11 @@ if uploaded_file is not None:
             # Time categorization
             def get_time_category(billed_time):
                 t = billed_time.time()
-                if time(6, 0) <= t < time(11, 00):
+                if time(6, 0) <= t < time(11, 0):
                     return 'Breakfast'
-                elif time(11, 0) <= t < time(16, 00):
+                elif time(11, 0) <= t < time(16, 0):
                     return 'Lunch'
-                elif time(16, 0) <= t < time(18, 00):
+                elif time(16, 0) <= t < time(18, 0):
                     return 'Snacks'
                 else:
                     return 'Late Night'
