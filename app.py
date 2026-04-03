@@ -161,19 +161,15 @@ if uploaded_file is not None:
                 # Process each item for this captain
                 for item in captain_items:
                     item_data = captain_data[captain_data['Item Name'] == item]
-                    pivot = pd.pivot_table(
-                        item_data,
-                        values='Quantity',
-                        columns='Time Category',
-                        aggfunc='sum',
-                        fill_value=0
-                    )
                     
-                    # Get values
-                    breakfast = int(pivot.get('Breakfast', 0))
-                    lunch = int(pivot.get('Lunch', 0))
-                    snacks = int(pivot.get('Snacks', 0))
-                    late_night = int(pivot.get('Late Night', 0))
+                    # FIX: Use groupby and sum instead of pivot_table to avoid Series issues
+                    item_summary = item_data.groupby('Time Category')['Quantity'].sum()
+                    
+                    # Get values - ensure we're getting scalar values
+                    breakfast = int(item_summary.get('Breakfast', 0))
+                    lunch = int(item_summary.get('Lunch', 0))
+                    snacks = int(item_summary.get('Snacks', 0))
+                    late_night = int(item_summary.get('Late Night', 0))
                     total = breakfast + lunch + snacks + late_night
                     
                     # Add to grand totals
