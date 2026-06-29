@@ -1,25 +1,96 @@
 import streamlit as st
 import pandas as pd
 import io
+import re
+
+def find_column(df, possible_names):
+    """Find a column by trying multiple possible names"""
+    for name in possible_names:
+        if name in df.columns:
+            return name
+    # Try case-insensitive matching
+    for col in df.columns:
+        if col.lower() in [n.lower() for n in possible_names]:
+            return col
+    return None
 
 def process_files(csv_file, excel_file):
     """Process the uploaded CSV and Excel files"""
     
-    # Read CSV
-    df_csv = pd.read_csv(csv_file, skiprows=5)
+    # Read CSV with error handling
+    try:
+        df_csv = pd.read_csv(csv_file, skiprows=5)
+    except Exception as e:
+        raise Exception(f"Error reading CSV file: {str(e)}")
     
-    # Drop missing Order IDs, group, convert to int
-    df_csv = df_csv.dropna(subset=["Order ID"])
-    df_csv = df_csv.groupby("Order ID", as_index=False)["After Discount"].sum()
-    df_csv["Order ID"] = df_csv["Order ID"].astype(int)
+    # Find the correct column names
+    order_id_col = find_column(df_csv, ['Order ID', 'OrderID', 'Order_Id', 'Order', 'OrderId'])
+    discount_col = find_column(df_csv, ['After Discount', 'AfterDiscount', 'Discount', 'Amount'])
+    
+    if order_id_col is None:
+        st.error(f"Available CSV columns: {list(df_csv.columns)}")
+        raise Exception("Could not find 'Order ID' column in CSV file")
+    
+    if discount_col is None:
+        st.error(f"Available CSV columns: {list(df_csv.columns)}")
+        raise Exception("Could not find 'After Discount' column in CSV file")
+    
+    # Drop missing Order IDs
+    df_csv = df_csv.dropna(subset=[order_id_col])
+    
+    # Group by Order ID and sum After Discount
+    df_csv = df_csv.groupby(order_id_col, as_index=False)[discount_col].sum()
+    
+    # Convert Order ID to int if possible
+    try:
+        df_csv[order_id_col] = df_csv[order_id_col].astype(int)
+    except:
+        pass  # Keep as is if conversion fails
     
     # Read Excel
-    df_excel = pd.read_excel(excel_file, skiprows=1)
-    df_excel["After Discount"] = df_excel["OrderPrice"] - df_excel["Discount"]
-    df_excel = df_excel[["OrderID", "After Discount", "Paymode"]]
+    try:
+        df_excel = pd.read_excel(excel_file, skiprows=1)
+    except Exception as e:
+        raise Exception(f"Error reading Excel file: {str(e)}")
     
-    # Rename CSV column to match Excel's "OrderID" for comparison
-    df_csv = df_csv.rename(columns={"Order ID": "OrderID"})
+    # Find Excel columns
+    excel_order_col = find_column(df_excel, ['OrderID', 'Order ID', 'Order_Id', 'Order', 'OrderId'])
+    excel_price_col = find_column(df_excel, ['OrderPrice', 'Price', 'Amount', 'Order Amount'])
+    excel_discount_col = find_column(df_excel, ['Discount', 'Discount Amount'])
+    excel_paymode_col = find_column(df_excel, ['Paymode', 'Payment Mode', 'PaymentMethod', 'Payment'])
+    
+    if excel_order_col is None:
+        st.error(f"Available Excel columns: {list(df_excel.columns)}")
+        raise Exception("Could not find 'OrderID' column in Excel file")
+    
+    if excel_price_col is None:
+        st.error(f"Available Excel columns: {list(df_excel.columns)}")
+        raise Exception("Could not find 'OrderPrice' column in Excel file")
+    
+    # Calculate After Discount
+    if excel_discount_col is not None:
+        df_excel["After Discount"] = df_excel[excel_price_col] - df_excel[excel_discount_col]
+    else:
+        # If no discount column, just use the price
+        df_excel["After Discount"] = df_excel[excel_price_col]
+    
+    # Select columns for Excel
+    excel_columns = [excel_order_col, "After Discount"]
+    if excel_paymode_col is not None:
+        excel_columns.append(excel_paymode_col)
+    
+    df_excel = df_excel[excel_columns]
+    
+    # Rename columns for comparison
+    df_csv = df_csv.rename(columns={order_id_col: "OrderID", discount_col: "After Discount"})
+    df_excel = df_excel.rename(columns={excel_order_col: "OrderID"})
+    
+    # Handle different data types for comparison
+    try:
+        df_csv["OrderID"] = df_csv["OrderID"].astype(str).str.strip()
+        df_excel["OrderID"] = df_excel["OrderID"].astype(str).str.strip()
+    except:
+        pass
     
     # Find missing records
     missing_in_excel = df_csv[~df_csv["OrderID"].isin(df_excel["OrderID"])]
@@ -63,11 +134,17 @@ def main():
             with col2:
                 st.metric("Total Excel Orders", len(df_excel))
             with col3:
-                st.metric("Missing in Excel", len(missing_in_excel), 
-                         delta=f"${missing_in_excel['After Discount'].sum():.2f}")
+                if len(missing_in_excel) > 0:
+                    st.metric("Missing in Excel", len(missing_in_excel), 
+                             delta=f"${missing_in_excel['After Discount'].sum():,.2f}")
+                else:
+                    st.metric("Missing in Excel", 0)
             with col4:
-                st.metric("Missing in CSV", len(missing_in_csv), 
-                         delta=f"${missing_in_csv['After Discount'].sum():.2f}")
+                if len(missing_in_csv) > 0:
+                    st.metric("Missing in CSV", len(missing_in_csv), 
+                             delta=f"${missing_in_csv['After Discount'].sum():,.2f}")
+                else:
+                    st.metric("Missing in CSV", 0)
             
             # Display missing records
             tab1, tab2, tab3, tab4 = st.tabs(["📋 CSV Data", "📋 Excel Data", 
@@ -106,7 +183,7 @@ def main():
                 st.subheader(f"⚠️ OrderIDs in CSV but missing in Excel ({len(missing_in_excel)})")
                 if len(missing_in_excel) > 0:
                     st.dataframe(missing_in_excel, use_container_width=True)
-                    st.info(f"Total missing After Discount (CSV side): ${missing_in_excel['After Discount'].sum():.2f}")
+                    st.info(f"Total missing After Discount (CSV side): ${missing_in_excel['After Discount'].sum():,.2f}")
                     
                     # Download missing data
                     csv_buffer = io.StringIO()
@@ -124,7 +201,7 @@ def main():
                 st.subheader(f"⚠️ OrderIDs in Excel but missing in CSV ({len(missing_in_csv)})")
                 if len(missing_in_csv) > 0:
                     st.dataframe(missing_in_csv, use_container_width=True)
-                    st.info(f"Total missing After Discount (Excel side): ${missing_in_csv['After Discount'].sum():.2f}")
+                    st.info(f"Total missing After Discount (Excel side): ${missing_in_csv['After Discount'].sum():,.2f}")
                     
                     # Download missing data
                     csv_buffer = io.StringIO()
@@ -141,25 +218,55 @@ def main():
             # Full comparison report
             st.subheader("📝 Complete Comparison Report")
             
-            # Create merged comparison
-            merged = pd.merge(df_csv, df_excel, on='OrderID', how='outer', suffixes=('_CSV', '_Excel'))
-            merged['Difference'] = merged['After Discount_CSV'] - merged['After Discount_Excel']
-            
-            st.dataframe(merged, use_container_width=True)
-            
-            # Download full report
-            csv_buffer = io.StringIO()
-            merged.to_csv(csv_buffer, index=False)
-            st.download_button(
-                label="📥 Download Complete Report",
-                data=csv_buffer.getvalue(),
-                file_name="complete_comparison_report.csv",
-                mime="text/csv"
-            )
+            try:
+                # Create merged comparison
+                merged = pd.merge(df_csv, df_excel, on='OrderID', how='outer', suffixes=('_CSV', '_Excel'))
+                
+                # Handle missing values in difference calculation
+                merged['After Discount_CSV'] = merged['After Discount_CSV'].fillna(0)
+                merged['After Discount_Excel'] = merged['After Discount_Excel'].fillna(0)
+                merged['Difference'] = merged['After Discount_CSV'] - merged['After Discount_Excel']
+                
+                # Add status column
+                merged['Status'] = merged.apply(
+                    lambda row: '✅ Match' if row['After Discount_CSV'] == row['After Discount_Excel'] 
+                    else '⚠️ Difference' if row['After Discount_CSV'] != 0 and row['After Discount_Excel'] != 0
+                    else '❌ Missing in CSV' if row['After Discount_CSV'] == 0
+                    else '❌ Missing in Excel',
+                    axis=1
+                )
+                
+                st.dataframe(merged, use_container_width=True)
+                
+                # Download full report
+                csv_buffer = io.StringIO()
+                merged.to_csv(csv_buffer, index=False)
+                st.download_button(
+                    label="📥 Download Complete Report",
+                    data=csv_buffer.getvalue(),
+                    file_name="complete_comparison_report.csv",
+                    mime="text/csv"
+                )
+            except Exception as e:
+                st.warning(f"Could not create comparison report: {str(e)}")
             
         except Exception as e:
             st.error(f"❌ Error processing files: {str(e)}")
-            st.info("Please make sure the files are in the correct format.")
+            st.info("💡 Please make sure the files are in the correct format.")
+            
+            # Show expected format
+            with st.expander("📖 Expected File Format"):
+                st.markdown("""
+                ### CSV File Format:
+                - Should have columns similar to: `Order ID`, `After Discount`
+                - The first 5 rows are skipped
+                
+                ### Excel File Format:
+                - Should have columns similar to: `OrderID`, `OrderPrice`, `Discount`
+                - The first 1 row is skipped
+                
+                ### The tool will try to find columns with similar names automatically
+                """)
     
     else:
         st.info("👈 Please upload both CSV and Excel files to begin analysis")
@@ -176,15 +283,17 @@ def main():
            - Display missing records
            - Provide download options for all results
         
-        ### File Format Requirements:
-        - **CSV**: Should have columns 'Order ID' and 'After Discount' (after skipping 5 rows)
-        - **Excel**: Should have columns 'OrderID', 'OrderPrice', 'Discount' (after skipping 1 row)
+        ### Features:
+        - **Auto-detection** of column names (case-insensitive)
+        - **Flexible column naming** - works with different variations
+        - **Detailed reports** with download options
+        - **Visual metrics** for quick insights
         
         ### What the tool does:
         - Compares orders between CSV and Excel files
         - Identifies orders missing in each file
         - Calculates totals for missing orders
-        - Provides downloadable reports
+        - Provides downloadable reports in CSV format
         """)
 
 if __name__ == "__main__":
