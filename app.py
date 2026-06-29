@@ -1,300 +1,385 @@
-import streamlit as st
 import pandas as pd
-import io
-import re
+from datetime import time
+import streamlit as st
+from io import BytesIO
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 
-def find_column(df, possible_names):
-    """Find a column by trying multiple possible names"""
-    for name in possible_names:
-        if name in df.columns:
-            return name
-    # Try case-insensitive matching
-    for col in df.columns:
-        if col.lower() in [n.lower() for n in possible_names]:
-            return col
-    return None
+st.set_page_config(page_title="Captain wise Sales", layout="wide")
 
-def process_files(csv_file, excel_file):
-    """Process the uploaded CSV and Excel files"""
-    
-    # Read CSV with error handling
-    try:
-        df_csv = pd.read_csv(csv_file, skiprows=5)
-    except Exception as e:
-        raise Exception(f"Error reading CSV file: {str(e)}")
-    
-    # Find the correct column names
-    order_id_col = find_column(df_csv, ['Order ID', 'OrderID', 'Order_Id', 'Order', 'OrderId'])
-    discount_col = find_column(df_csv, ['After Discount', 'AfterDiscount', 'Discount', 'Amount'])
-    
-    if order_id_col is None:
-        st.error(f"Available CSV columns: {list(df_csv.columns)}")
-        raise Exception("Could not find 'Order ID' column in CSV file")
-    
-    if discount_col is None:
-        st.error(f"Available CSV columns: {list(df_csv.columns)}")
-        raise Exception("Could not find 'After Discount' column in CSV file")
-    
-    # Drop missing Order IDs
-    df_csv = df_csv.dropna(subset=[order_id_col])
-    
-    # Group by Order ID and sum After Discount
-    df_csv = df_csv.groupby(order_id_col, as_index=False)[discount_col].sum()
-    
-    # Convert Order ID to int if possible
-    try:
-        df_csv[order_id_col] = df_csv[order_id_col].astype(int)
-    except:
-        pass  # Keep as is if conversion fails
-    
-    # Read Excel
-    try:
-        df_excel = pd.read_excel(excel_file, skiprows=1)
-    except Exception as e:
-        raise Exception(f"Error reading Excel file: {str(e)}")
-    
-    # Find Excel columns
-    excel_order_col = find_column(df_excel, ['OrderID', 'Order ID', 'Order_Id', 'Order', 'OrderId'])
-    excel_price_col = find_column(df_excel, ['OrderPrice', 'Price', 'Amount', 'Order Amount'])
-    excel_discount_col = find_column(df_excel, ['Discount', 'Discount Amount'])
-    excel_paymode_col = find_column(df_excel, ['Paymode', 'Payment Mode', 'PaymentMethod', 'Payment'])
-    
-    if excel_order_col is None:
-        st.error(f"Available Excel columns: {list(df_excel.columns)}")
-        raise Exception("Could not find 'OrderID' column in Excel file")
-    
-    if excel_price_col is None:
-        st.error(f"Available Excel columns: {list(df_excel.columns)}")
-        raise Exception("Could not find 'OrderPrice' column in Excel file")
-    
-    # Calculate After Discount
-    if excel_discount_col is not None:
-        df_excel["After Discount"] = df_excel[excel_price_col] - df_excel[excel_discount_col]
-    else:
-        # If no discount column, just use the price
-        df_excel["After Discount"] = df_excel[excel_price_col]
-    
-    # Select columns for Excel
-    excel_columns = [excel_order_col, "After Discount"]
-    if excel_paymode_col is not None:
-        excel_columns.append(excel_paymode_col)
-    
-    df_excel = df_excel[excel_columns]
-    
-    # Rename columns for comparison
-    df_csv = df_csv.rename(columns={order_id_col: "OrderID", discount_col: "After Discount"})
-    df_excel = df_excel.rename(columns={excel_order_col: "OrderID"})
-    
-    # Handle different data types for comparison
-    try:
-        df_csv["OrderID"] = df_csv["OrderID"].astype(str).str.strip()
-        df_excel["OrderID"] = df_excel["OrderID"].astype(str).str.strip()
-    except:
-        pass
-    
-    # Find missing records
-    missing_in_excel = df_csv[~df_csv["OrderID"].isin(df_excel["OrderID"])]
-    missing_in_csv = df_excel[~df_excel["OrderID"].isin(df_csv["OrderID"])]
-    
-    return df_csv, df_excel, missing_in_excel, missing_in_csv
+# Custom CSS for colors
+st.markdown("""
+<style>
+    /* Grand total row - light green background */
+    .grandtotal-row {
+        background-color: #d4edda !important;
+        font-weight: bold !important;
+    }
+    /* Item rows - distinct colors per captain */
+    .captain-0 {
+        background-color: #e6ffe6 !important;  /* Light green */
+    }
+    .captain-1 {
+        background-color: #e6f0ff !important;  /* Light blue */
+    }
+    .captain-2 {
+        background-color: #fff2e6 !important;  /* Light orange */
+    }
+    .captain-3 {
+        background-color: #ffe6f0 !important;  /* Light pink */
+    }
+    .captain-4 {
+        background-color: #f0e6ff !important;  /* Light purple */
+    }
+    /* Summary section styling */
+    .item-card {
+        background-color: white;
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        margin: 5px;
+        text-align: center;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-def main():
-    st.set_page_config(page_title="Order Comparison Tool", layout="wide")
-    
-    st.title("📊 Order Comparison Tool")
-    st.markdown("Upload CSV and Excel files to compare orders")
-    
-    # Create two columns for file uploads
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📁 Upload CSV File")
-        csv_file = st.file_uploader("Choose CSV file", type=['csv'])
-        if csv_file:
-            st.success("✅ CSV file uploaded successfully!")
-    
-    with col2:
-        st.subheader("📁 Upload Excel File")
-        excel_file = st.file_uploader("Choose Excel file", type=['xlsx', 'xls'])
-        if excel_file:
-            st.success("✅ Excel file uploaded successfully!")
-    
-    # Process files when both are uploaded
-    if csv_file and excel_file:
-        try:
-            with st.spinner("Processing files..."):
-                df_csv, df_excel, missing_in_excel, missing_in_csv = process_files(csv_file, excel_file)
+st.title("📊 Captain wise Sales")
+st.write("Upload your CSV file to generate the report")
+
+# File upload
+uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+
+if uploaded_file is not None:
+    try:
+        # Read the uploaded file
+        df = pd.read_csv(uploaded_file, skiprows=5)
+        st.success("File uploaded successfully!")
+        
+        with st.spinner("Processing..."):
+            # Filter data
+            file1 = df.iloc[:-1] if len(df) > 0 else df
+            file2 = file1[file1['Order Type'] == 'Dine-In'].copy()
+            file = file2[['Item Name', 'Order Type', 'Quantity', 'Captain Name','Billed Time']]
+            file = file[file['Captain Name'].str.lower() != 'without_captain'].copy()
             
-            # Display summary statistics
-            st.subheader("📊 Summary Statistics")
-            col1, col2, col3, col4 = st.columns(4)
+            # Convert Billed Time with error handling
+            file['Billed Time'] = pd.to_datetime(file['Billed Time'], errors='coerce')
+            
+            # Drop rows with invalid Billed Time
+            original_len = len(file)
+            file = file.dropna(subset=['Billed Time'])
+            if len(file) < original_len:
+                st.warning(f"Dropped {original_len - len(file)} rows with invalid Billed Time values")
+            
+            # Time categorization with null check
+            def get_time_category(billed_time):
+                if pd.isna(billed_time):
+                    return 'Unknown'
+                try:
+                    t = billed_time.time()
+                    if time(6, 00) <= t < time(11, 00):
+                        return 'Breakfast'
+                    elif time(11, 00) <= t < time(16, 00):
+                        return 'Lunch'
+                    elif time(16, 00) <= t < time(18, 00):
+                        return 'Snacks'
+                    else:
+                        return 'Late Night'
+                except (AttributeError, TypeError):
+                    return 'Unknown'
+            
+            file['Time Category'] = file['Billed Time'].apply(get_time_category)
+            
+            # Filter out unknown time categories if needed
+            file = file[file['Time Category'] != 'Unknown'].copy()
+            
+            # Group items
+            def Grouped_items(ItemName):
+                item_name = str(ItemName).lower()
+                if "tamil nadu meals" in item_name:
+                    return "Tamilnadu Meals"
+                elif 'curd rice' in item_name:
+                    return "Classic Curd Rice"
+                elif 'thali' in item_name:
+                    return "North Indian Thali"
+                elif "special soup" in item_name:
+                    return "Day Spl Soup"
+                elif "tandoori platter" in item_name:
+                    return "Tandoori Platter"
+                elif "kunafa" in item_name:
+                    return 'Kunafa_item'
+                elif "fried rice" in item_name:
+                    return 'Fried rice'
+                elif "noodles" in item_name:
+                    return 'Noodles_Item'
+                elif "falooda" in item_name:
+                    return "Falooda_Item"
+                else:
+                    return None
+            
+            file['Item Name'] = file['Item Name'].apply(Grouped_items)
+            file = file.dropna(subset=['Item Name']).copy()
+            
+            # Create report
+            unique_captains = sorted(file['Captain Name'].unique())
+            
+            # Create a mapping of captain to color index
+            captain_to_color = {}
+            for idx, captain in enumerate(unique_captains):
+                captain_to_color[captain] = idx % 5  # Cycle through 5 colors
+            
+            # Track grand totals
+            grand_total_breakfast = 0
+            grand_total_lunch = 0
+            grand_total_snacks = 0
+            grand_total_latenight = 0
+            grand_total_all = 0
+            
+            # Track item-wise totals
+            item_totals = {}
+            
+            # Create a list to store all rows for display
+            display_rows = []
+            
+            # Process each captain
+            for captain in unique_captains:
+                captain_data = file[file['Captain Name'] == captain]
+                captain_items = sorted(captain_data['Item Name'].unique())
+                color_index = captain_to_color[captain]
+                
+                # Add captain name row (no color)
+                display_rows.append({
+                    'Captain Name': captain,
+                    'Item Name': '',
+                    'Breakfast': '',
+                    'Lunch': '',
+                    'Snacks': '',
+                    'Late Night': '',
+                    'Total': ''
+                })
+                
+                # Process each item for this captain
+                for item in captain_items:
+                    item_data = captain_data[captain_data['Item Name'] == item]
+                    
+                    # FIX: Use groupby and sum instead of pivot_table to avoid Series issues
+                    item_summary = item_data.groupby('Time Category')['Quantity'].sum()
+                    
+                    # Get values - ensure we're getting scalar values
+                    breakfast = int(item_summary.get('Breakfast', 0))
+                    lunch = int(item_summary.get('Lunch', 0))
+                    snacks = int(item_summary.get('Snacks', 0))
+                    late_night = int(item_summary.get('Late Night', 0))
+                    total = breakfast + lunch + snacks + late_night
+                    
+                    # Add to grand totals
+                    grand_total_breakfast += breakfast
+                    grand_total_lunch += lunch
+                    grand_total_snacks += snacks
+                    grand_total_latenight += late_night
+                    grand_total_all += total
+                    
+                    # Add to item-wise totals
+                    if item not in item_totals:
+                        item_totals[item] = 0
+                    item_totals[item] += total
+                    
+                    # Add item row with color based on captain
+                    display_rows.append({
+                        'Captain Name': '',
+                        'Item Name': item,
+                        'Breakfast': breakfast if breakfast > 0 else '',
+                        'Lunch': lunch if lunch > 0 else '',
+                        'Snacks': snacks if snacks > 0 else '',
+                        'Late Night': late_night if late_night > 0 else '',
+                        'Total': total,
+                        'color_class': f'captain-{color_index}'  # Add color class for styling
+                    })
+            
+            # Add grand total row
+            display_rows.append({
+                'Captain Name': 'GRAND TOTAL',
+                'Item Name': '--- ALL ITEMS TOTAL ---',
+                'Breakfast': grand_total_breakfast if grand_total_breakfast > 0 else '',
+                'Lunch': grand_total_lunch if grand_total_lunch > 0 else '',
+                'Snacks': grand_total_snacks if grand_total_snacks > 0 else '',
+                'Late Night': grand_total_latenight if grand_total_latenight > 0 else '',
+                'Total': grand_total_all,
+                'color_class': 'grandtotal-row'
+            })
+            
+            # Create dataframe
+            df_display = pd.DataFrame(display_rows)
+            
+            # Display results
+            st.subheader("📋 Processed Results")
+            
+            # Apply CSS classes for coloring
+            def color_rows(row):
+                if 'color_class' in row and row['color_class'] == 'grandtotal-row':
+                    return ['background-color: #d4edda; font-weight: bold'] * len(row)
+                elif 'color_class' in row and row['color_class']:
+                    # This is an item row with captain color
+                    color_map = {
+                        'captain-0': 'background-color: #e6ffe6',
+                        'captain-1': 'background-color: #e6f0ff',
+                        'captain-2': 'background-color: #fff2e6',
+                        'captain-3': 'background-color: #ffe6f0',
+                        'captain-4': 'background-color: #f0e6ff',
+                    }
+                    color = color_map.get(row['color_class'], '')
+                    return [color] * len(row)
+                else:
+                    # Captain name row - no color
+                    return [''] * len(row)
+            
+            # Apply styling to the dataframe
+            if 'color_class' in df_display.columns:
+                styled_df = df_display.drop('color_class', axis=1).style.apply(color_rows, axis=1)
+            else:
+                styled_df = df_display.style
+            
+            # Display the dataframe
+            st.dataframe(styled_df, use_container_width=True, height=500)
+            
+            # Item-wise summary
+            st.subheader("📦 Item-wise Total Quantity")
+            
+            # Display items in multiple columns
+            cols = st.columns(3)
+            items_list = sorted(item_totals.items(), key=lambda x: x[1], reverse=True)
+            for idx, (item, qty) in enumerate(items_list):
+                col_idx = idx % 3
+                with cols[col_idx]:
+                    st.markdown(f"""
+                    <div class="item-card">
+                        <strong>{item}</strong><br>
+                        <span style="font-size: 24px; color: #FF4B4B;">{qty}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Time-wise summary
+            st.subheader("⏰ Time-wise Summary")
+            col1, col2, col3, col4, col5 = st.columns(5)
             
             with col1:
-                st.metric("Total CSV Orders", len(df_csv))
+                st.metric("Total Items", grand_total_all)
             with col2:
-                st.metric("Total Excel Orders", len(df_excel))
+                st.metric("Breakfast", grand_total_breakfast)
             with col3:
-                if len(missing_in_excel) > 0:
-                    st.metric("Missing in Excel", len(missing_in_excel), 
-                             delta=f"${missing_in_excel['After Discount'].sum():,.2f}")
-                else:
-                    st.metric("Missing in Excel", 0)
+                st.metric("Lunch", grand_total_lunch)
             with col4:
-                if len(missing_in_csv) > 0:
-                    st.metric("Missing in CSV", len(missing_in_csv), 
-                             delta=f"${missing_in_csv['After Discount'].sum():,.2f}")
-                else:
-                    st.metric("Missing in CSV", 0)
+                st.metric("Snacks", grand_total_snacks)
+            with col5:
+                st.metric("Late Night", grand_total_latenight)
             
-            # Display missing records
-            tab1, tab2, tab3, tab4 = st.tabs(["📋 CSV Data", "📋 Excel Data", 
-                                              "⚠️ Missing in Excel", "⚠️ Missing in CSV"])
+            # Download buttons
+            st.subheader("💾 Download")
+            col1, col2 = st.columns(2)
             
-            with tab1:
-                st.subheader("CSV Data")
-                st.dataframe(df_csv, use_container_width=True)
+            with col1:
+                # Create Excel file
+                output = BytesIO()
                 
-                # Download CSV data
-                csv_buffer = io.StringIO()
-                df_csv.to_csv(csv_buffer, index=False)
-                st.download_button(
-                    label="📥 Download CSV Data",
-                    data=csv_buffer.getvalue(),
-                    file_name="csv_data.csv",
-                    mime="text/csv"
-                )
-            
-            with tab2:
-                st.subheader("Excel Data")
-                st.dataframe(df_excel, use_container_width=True)
+                # Create a workbook
+                wb = Workbook()
+                ws = wb.active
+                ws.title = "Sales Data"
                 
-                # Download Excel data
-                excel_buffer = io.BytesIO()
-                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                    df_excel.to_excel(writer, index=False, sheet_name='Excel Data')
-                st.download_button(
-                    label="📥 Download Excel Data",
-                    data=excel_buffer.getvalue(),
-                    file_name="excel_data.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            
-            with tab3:
-                st.subheader(f"⚠️ OrderIDs in CSV but missing in Excel ({len(missing_in_excel)})")
-                if len(missing_in_excel) > 0:
-                    st.dataframe(missing_in_excel, use_container_width=True)
-                    st.info(f"Total missing After Discount (CSV side): ${missing_in_excel['After Discount'].sum():,.2f}")
-                    
-                    # Download missing data
-                    csv_buffer = io.StringIO()
-                    missing_in_excel.to_csv(csv_buffer, index=False)
-                    st.download_button(
-                        label="📥 Download Missing in Excel",
-                        data=csv_buffer.getvalue(),
-                        file_name="missing_in_excel.csv",
-                        mime="text/csv"
+                # Define colors for Excel
+                colors = {
+                    'grand_total': PatternFill(start_color='D4EDDA', end_color='D4EDDA', fill_type='solid'),
+                    0: PatternFill(start_color='E6FFE6', end_color='E6FFE6', fill_type='solid'),
+                    1: PatternFill(start_color='E6F0FF', end_color='E6F0FF', fill_type='solid'),
+                    2: PatternFill(start_color='FFF2E6', end_color='FFF2E6', fill_type='solid'),
+                    3: PatternFill(start_color='FFE6F0', end_color='FFE6F0', fill_type='solid'),
+                    4: PatternFill(start_color='F0E6FF', end_color='F0E6FF', fill_type='solid'),
+                }
+                
+                # Add headers
+                headers = ['Captain Name', 'Item Name', 'Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total']
+                for col_num, header in enumerate(headers, 1):
+                    cell = ws.cell(row=1, column=col_num)
+                    cell.value = header
+                    cell.font = Font(bold=True)
+                    cell.alignment = Alignment(horizontal='center')
+                    cell.border = Border(
+                        left=Side(style='thin'), 
+                        right=Side(style='thin'),
+                        top=Side(style='thin'), 
+                        bottom=Side(style='thin')
                     )
-                else:
-                    st.success("🎉 No orders missing in Excel!")
-            
-            with tab4:
-                st.subheader(f"⚠️ OrderIDs in Excel but missing in CSV ({len(missing_in_csv)})")
-                if len(missing_in_csv) > 0:
-                    st.dataframe(missing_in_csv, use_container_width=True)
-                    st.info(f"Total missing After Discount (Excel side): ${missing_in_csv['After Discount'].sum():,.2f}")
+                
+                # Add data with colors
+                for row_num, row_data in enumerate(display_rows, 2):
+                    # Determine row color (only for items and grand total)
+                    if 'color_class' in row_data:
+                        if row_data['color_class'] == 'grandtotal-row':
+                            row_color = colors['grand_total']
+                            font = Font(bold=True)
+                        elif row_data['color_class'].startswith('captain-'):
+                            color_index = int(row_data['color_class'].split('-')[1])
+                            row_color = colors.get(color_index, colors[0])
+                            font = Font(bold=False)
+                        else:
+                            row_color = None
+                            font = Font(bold=False)
+                    else:
+                        # Captain name row - no color
+                        row_color = None
+                        font = Font(bold=False)
                     
-                    # Download missing data
-                    csv_buffer = io.StringIO()
-                    missing_in_csv.to_csv(csv_buffer, index=False)
-                    st.download_button(
-                        label="📥 Download Missing in CSV",
-                        data=csv_buffer.getvalue(),
-                        file_name="missing_in_csv.csv",
-                        mime="text/csv"
-                    )
-                else:
-                    st.success("🎉 No orders missing in CSV!")
-            
-            # Full comparison report
-            st.subheader("📝 Complete Comparison Report")
-            
-            try:
-                # Create merged comparison
-                merged = pd.merge(df_csv, df_excel, on='OrderID', how='outer', suffixes=('_CSV', '_Excel'))
+                    for col_num, col_name in enumerate(headers, 1):
+                        cell = ws.cell(row=row_num, column=col_num)
+                        cell.value = row_data[col_name]
+                        if row_color:
+                            cell.fill = row_color
+                        cell.font = font
+                        cell.alignment = Alignment(horizontal='center' if col_name in ['Breakfast', 'Lunch', 'Snacks', 'Late Night', 'Total'] else 'left')
+                        cell.border = Border(
+                            left=Side(style='thin'), 
+                            right=Side(style='thin'),
+                            top=Side(style='thin'), 
+                            bottom=Side(style='thin')
+                        )
                 
-                # Handle missing values in difference calculation
-                merged['After Discount_CSV'] = merged['After Discount_CSV'].fillna(0)
-                merged['After Discount_Excel'] = merged['After Discount_Excel'].fillna(0)
-                merged['Difference'] = merged['After Discount_CSV'] - merged['After Discount_Excel']
+                # Auto-fit columns
+                for column in ws.columns:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = min(max_length + 2, 30)
+                    ws.column_dimensions[column_letter].width = adjusted_width
                 
-                # Add status column
-                merged['Status'] = merged.apply(
-                    lambda row: '✅ Match' if row['After Discount_CSV'] == row['After Discount_Excel'] 
-                    else '⚠️ Difference' if row['After Discount_CSV'] != 0 and row['After Discount_Excel'] != 0
-                    else '❌ Missing in CSV' if row['After Discount_CSV'] == 0
-                    else '❌ Missing in Excel',
-                    axis=1
-                )
+                wb.save(output)
                 
-                st.dataframe(merged, use_container_width=True)
-                
-                # Download full report
-                csv_buffer = io.StringIO()
-                merged.to_csv(csv_buffer, index=False)
                 st.download_button(
-                    label="📥 Download Complete Report",
-                    data=csv_buffer.getvalue(),
-                    file_name="complete_comparison_report.csv",
-                    mime="text/csv"
+                    label="📥 Download Excel (Formatted)",
+                    data=output.getvalue(),
+                    file_name="processed_sales_data.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
                 )
-            except Exception as e:
-                st.warning(f"Could not create comparison report: {str(e)}")
             
-        except Exception as e:
-            st.error(f"❌ Error processing files: {str(e)}")
-            st.info("💡 Please make sure the files are in the correct format.")
-            
-            # Show expected format
-            with st.expander("📖 Expected File Format"):
-                st.markdown("""
-                ### CSV File Format:
-                - Should have columns similar to: `Order ID`, `After Discount`
-                - The first 5 rows are skipped
-                
-                ### Excel File Format:
-                - Should have columns similar to: `OrderID`, `OrderPrice`, `Discount`
-                - The first 1 row is skipped
-                
-                ### The tool will try to find columns with similar names automatically
-                """)
-    
-    else:
-        st.info("👈 Please upload both CSV and Excel files to begin analysis")
-        
-    # Instructions
-    with st.expander("📖 Instructions"):
-        st.markdown("""
-        ### How to use this tool:
-        1. **Upload CSV file** - Click on the first upload button and select your CSV file
-        2. **Upload Excel file** - Click on the second upload button and select your Excel file
-        3. **View Results** - The tool will automatically:
-           - Process both files
-           - Show summary statistics
-           - Display missing records
-           - Provide download options for all results
-        
-        ### Features:
-        - **Auto-detection** of column names (case-insensitive)
-        - **Flexible column naming** - works with different variations
-        - **Detailed reports** with download options
-        - **Visual metrics** for quick insights
-        
-        ### What the tool does:
-        - Compares orders between CSV and Excel files
-        - Identifies orders missing in each file
-        - Calculates totals for missing orders
-        - Provides downloadable reports in CSV format
-        """)
-
-if __name__ == "__main__":
-    main()
+            with col2:
+                # Prepare CSV data (remove color_class)
+                csv_df = pd.DataFrame([
+                    {k: v for k, v in row.items() if k != 'color_class'}
+                    for row in display_rows
+                ])
+                csv_data = csv_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download CSV",
+                    data=csv_data,
+                    file_name="processed_sales_data.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                    
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
