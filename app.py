@@ -17,7 +17,7 @@ if csv_file and excel_file:
         # Drop missing Order IDs, group, convert to int
         df_csv = df_csv.dropna(subset=["Order Id"])
         df_csv = df_csv.groupby("Order Id", as_index=False)["After Discount"].sum()
-        df_csv["Order Id"] = df_csv["Order ID"].astype(int)
+        df_csv["Order Id"] = df_csv["Order Id"].astype(int)
 
         # Read Excel
         df_excel = pd.read_excel(excel_file, skiprows=1)
@@ -25,7 +25,7 @@ if csv_file and excel_file:
         df_excel = df_excel[["OrderID", "After Discount", "Paymode"]]
 
         # Rename CSV column to match Excel's "OrderID" for comparison
-        df_csv = df_csv.rename(columns={"Order ID": "OrderID"})
+        df_csv = df_csv.rename(columns={"Order Id": "OrderID"})
 
         # ---- Find OrderIDs present in CSV but missing in Excel ----
         missing_in_excel = df_csv[~df_csv["OrderID"].isin(df_excel["OrderID"])]
