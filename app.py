@@ -16,8 +16,8 @@ if csv_file and excel_file:
 
         # Drop missing Order IDs, group, convert to int
         df_csv = df_csv.dropna(subset=["Order Id"])
-        df_csv = df_csv.groupby("Order ID", as_index=False)["After Discount"].sum()
-        df_csv["Order ID"] = df_csv["Order ID"].astype(int)
+        df_csv = df_csv.groupby("Order Id", as_index=False)["After Discount"].sum()
+        df_csv["Order Id"] = df_csv["Order ID"].astype(int)
 
         # Read Excel
         df_excel = pd.read_excel(excel_file, skiprows=1)
