@@ -13,6 +13,39 @@ if csv_file and excel_file:
     try:
         # Read CSV — fixed skiprows to 5 (real header line)
         df_csv = pd.read_csv(csv_file, skiprows=5)
+        
+        # Debug: Show CSV columns
+        st.write("CSV Columns:", df_csv.columns.tolist())
+        
+        # Find the correct column names (case insensitive)
+        csv_order_col = None
+        csv_discount_col = None
+        
+        for col in df_csv.columns:
+            if 'order' in col.lower() and 'id' in col.lower():
+                csv_order_col = col
+            if 'discount' in col.lower() and 'after' in col.lower():
+                csv_discount_col = col
+        
+        # If not found, try alternative names
+        if csv_order_col is None:
+            for col in df_csv.columns:
+                if 'order' in col.lower():
+                    csv_order_col = col
+                    break
+        
+        if csv_discount_col is None:
+            for col in df_csv.columns:
+                if 'discount' in col.lower():
+                    csv_discount_col = col
+                    break
+        
+        if csv_order_col is None or csv_discount_col is None:
+            st.error(f"Could not find required columns. Available columns: {df_csv.columns.tolist()}")
+            st.stop()
+        
+        # Rename columns for consistency
+        df_csv = df_csv.rename(columns={csv_order_col: "Order ID", csv_discount_col: "After Discount"})
 
         # Drop missing Order IDs, group, convert to int
         df_csv = df_csv.dropna(subset=["Order ID"])
@@ -21,8 +54,40 @@ if csv_file and excel_file:
 
         # Read Excel
         df_excel = pd.read_excel(excel_file, skiprows=1)
-        df_excel["After Discount"] = df_excel["OrderPrice"] - df_excel["Discount"]
-        df_excel = df_excel[["OrderID", "After Discount", "Paymode"]]
+        
+        # Debug: Show Excel columns
+        st.write("Excel Columns:", df_excel.columns.tolist())
+        
+        # Find Excel columns
+        excel_order_col = None
+        excel_price_col = None
+        excel_discount_col = None
+        excel_paymode_col = None
+        
+        for col in df_excel.columns:
+            if 'order' in col.lower() and 'id' in col.lower():
+                excel_order_col = col
+            if 'price' in col.lower() or 'orderprice' in col.lower():
+                excel_price_col = col
+            if 'discount' in col.lower():
+                excel_discount_col = col
+            if 'paymode' in col.lower() or 'pay mode' in col.lower():
+                excel_paymode_col = col
+        
+        if excel_order_col is None or excel_price_col is None or excel_discount_col is None:
+            st.error(f"Could not find required columns in Excel. Available columns: {df_excel.columns.tolist()}")
+            st.stop()
+        
+        # Use found column names
+        df_excel["After Discount"] = df_excel[excel_price_col] - df_excel[excel_discount_col]
+        
+        # Select columns
+        cols_to_keep = [excel_order_col, "After Discount"]
+        if excel_paymode_col:
+            cols_to_keep.append(excel_paymode_col)
+        
+        df_excel = df_excel[cols_to_keep]
+        df_excel = df_excel.rename(columns={excel_order_col: "OrderID"})
 
         # Rename CSV column to match Excel's "OrderID" for comparison
         df_csv = df_csv.rename(columns={"Order ID": "OrderID"})
@@ -91,5 +156,7 @@ if csv_file and excel_file:
 
     except Exception as e:
         st.error(f"Error processing files: {e}")
+        st.write("Debug - CSV columns:", df_csv.columns.tolist() if 'df_csv' in locals() else "CSV not loaded")
+        st.write("Debug - Excel columns:", df_excel.columns.tolist() if 'df_excel' in locals() else "Excel not loaded")
 else:
     st.info("Please upload both CSV and Excel files from the sidebar to begin comparison.")
